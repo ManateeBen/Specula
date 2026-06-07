@@ -1,0 +1,29 @@
+appId: com.specula.reader
+productName: Specula
+directories:
+  output: release
+files:
+  - dist/**/*
+  - dist-electron/**/*
+extraResources:
+  - from: node_modules/sql.js/dist/sql-wasm.wasm
+    to: sql-wasm.wasm
+win:
+  icon: build/icon.ico
+  signAndEditExecutable: false
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Specula
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+mac:
+  target: dmg
+linux:
+  target: AppImage

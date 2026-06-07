@@ -1,0 +1,34 @@
+import { create } from 'zustand'
+import type { AppSettings, TeachingMode } from '../types'
+
+interface SettingsState extends AppSettings {
+  loaded: boolean
+  load: () => Promise<void>
+  update: (partial: Partial<AppSettings>) => Promise<void>
+}
+
+export const useSettingsStore = create<SettingsState>((set) => ({
+  apiKey: '',
+  model: 'deepseek-chat',
+  defaultTeachingMode: 'direct' as TeachingMode,
+  darkMode: false,
+  loaded: false,
+  load: async () => {
+    const settings = await window.specula.settings.get()
+    set({ ...settings, loaded: true })
+    if (settings.darkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  },
+  update: async (partial) => {
+    const settings = await window.specula.settings.set(partial)
+    set(settings)
+    if (settings.darkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  },
+}))

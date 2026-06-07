@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply h-full;
+  }
+  body {
+    @apply h-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100;
+  }
+  #root {
+    @apply h-full;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-specula-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-specula-700 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700;
+  }
+  .card {
+    @apply rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900;
+  }
+  .input {
+    @apply w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-specula-500 focus:ring-2 focus:ring-specula-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100;
+  }
+}
+
+/* EPUB reader styles */
+.epub-container {
+  @apply h-full overflow-auto bg-amber-50 dark:bg-gray-900;
+}
+.epub-container iframe {
+  @apply border-0;
+}
+
+/* Rendered EPUB chapter content */
+.epub-content {
+  @apply text-[15px] leading-7 text-gray-900 dark:text-gray-100;
+}
+.epub-content img,
+.epub-content svg {
+  max-width: 100%;
+  height: auto;
+}
+.epub-content p {
+  margin: 0.8em 0;
+}
+.epub-content h1,
+.epub-content h2,
+.epub-content h3,
+.epub-content h4 {
+  @apply font-semibold;
+  margin: 1.2em 0 0.6em;
+  line-height: 1.35;
+}
+.epub-content h1 { @apply text-2xl; }
+.epub-content h2 { @apply text-xl; }
+.epub-content h3 { @apply text-lg; }
+.epub-content ul,
+.epub-content ol {
+  margin: 0.8em 0;
+  padding-left: 1.6em;
+}
+.epub-content li { margin: 0.3em 0; }
+.epub-content blockquote {
+  @apply border-l-4 border-gray-300 pl-4 italic text-gray-600 dark:border-gray-600 dark:text-gray-400;
+  margin: 0.8em 0;
+}
+.epub-content pre {
+  @apply rounded-lg bg-gray-100 dark:bg-gray-800;
+  overflow-x: auto;
+  padding: 0.85em 1em;
+  margin: 0.9em 0;
+}
+.epub-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+}
+.epub-content a {
+  @apply text-specula-600 dark:text-specula-400;
+}
+
+/* PDF viewer */
+.pdf-viewer-container {
+  @apply h-full;
+}
+
+::selection {
+  @apply bg-yellow-200 dark:bg-yellow-700;
+}
