@@ -83,6 +83,29 @@ export interface AppSettings {
   model: string
   defaultTeachingMode: TeachingMode
   darkMode: boolean
+  // Vision model (for explaining images) — DeepSeek's API is text-only, so a
+  // separate OpenAI-compatible vision endpoint is used (e.g. Aliyun DashScope / Qwen-VL).
+  visionApiKey: string
+  visionBaseURL: string
+  visionModel: string
+}
+
+export interface ImageSelectionInfo {
+  imageDataUrl: string
+  imageAltText: string
+  imageCaption: string
+  imageContext: string
+  rect: DOMRect
+}
+
+export interface ImageExplainRequest {
+  imageDataUrl: string
+  altText: string
+  caption: string
+  context: string
+  teachingMode: TeachingMode
+  bookTitle?: string
+  chapterTitle?: string
 }
 
 export interface ExplainRequest {
@@ -137,6 +160,7 @@ export interface SpeculaAPI {
   ai: {
     explain: (req: ExplainRequest) => Promise<string>
     explainStream: (req: ExplainRequest) => Promise<void>
+    explainImageStream: (req: ImageExplainRequest) => Promise<void>
     onExplainChunk: (callback: (chunk: string) => void) => () => void
     generateQuiz: (req: GenerateQuizRequest) => Promise<Quiz>
     gradeQuiz: (req: GradeQuizRequest) => Promise<{
@@ -155,6 +179,7 @@ export interface SpeculaAPI {
     get: () => Promise<AppSettings>
     set: (settings: Partial<AppSettings>) => Promise<AppSettings>
     testConnection: () => Promise<{ ok: boolean; message: string }>
+    testVision: () => Promise<{ ok: boolean; message: string }>
   }
 }
 

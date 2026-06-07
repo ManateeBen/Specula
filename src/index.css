@@ -46,6 +46,15 @@
   max-width: 100%;
   height: auto;
 }
+.epub-content--images img {
+  cursor: zoom-in;
+  border-radius: 0.25rem;
+  transition: outline-color 0.15s;
+  outline: 2px solid transparent;
+}
+.epub-content--images img:hover {
+  outline-color: theme('colors.specula.400');
+}
 .epub-content p {
   margin: 0.8em 0;
 }

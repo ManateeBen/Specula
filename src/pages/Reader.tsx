@@ -4,7 +4,8 @@ import { ArrowLeft, Highlighter, ClipboardList, PanelRightClose, PanelRightOpen 
 import EpubReader from '../components/epub/EpubReader'
 import PdfReader from '../components/pdf/PdfReader'
 import HighlightPopover from '../components/HighlightPopover'
-import type { Book, Chapter, Highlight } from '../types'
+import ImageExplanationPopover from '../components/ImageExplanationPopover'
+import type { Book, Chapter, Highlight, ImageSelectionInfo } from '../types'
 
 export default function Reader() {
   const { bookId } = useParams<{ bookId: string }>()
@@ -18,6 +19,7 @@ export default function Reader() {
     context: string
     rect: DOMRect
   } | null>(null)
+  const [imageSelection, setImageSelection] = useState<ImageSelectionInfo | null>(null)
   const [currentChapterId, setCurrentChapterId] = useState<string | null>(null)
   const [initialPosition, setInitialPosition] = useState<string>('')
 
@@ -53,7 +55,13 @@ export default function Reader() {
   )
 
   const handleTextSelect = useCallback((text: string, context: string, rect: DOMRect) => {
+    setImageSelection(null)
     setSelection({ text, context, rect })
+  }, [])
+
+  const handleImageSelect = useCallback((info: ImageSelectionInfo) => {
+    setSelection(null)
+    setImageSelection(info)
   }, [])
 
   const refreshHighlights = async () => {
@@ -114,6 +122,7 @@ export default function Reader() {
               initialChapterId={currentChapterId}
               onProgress={handleProgress}
               onTextSelect={handleTextSelect}
+              onImageSelect={handleImageSelect}
             />
           ) : (
             <PdfReader
@@ -133,6 +142,18 @@ export default function Reader() {
               bookTitle={book.title}
               chapterTitle={currentChapter?.title}
               onClose={() => setSelection(null)}
+              onSaved={refreshHighlights}
+            />
+          )}
+
+          {imageSelection && bookId && (
+            <ImageExplanationPopover
+              selection={imageSelection}
+              bookId={bookId}
+              chapterId={currentChapterId}
+              bookTitle={book.title}
+              chapterTitle={currentChapter?.title}
+              onClose={() => setImageSelection(null)}
               onSaved={refreshHighlights}
             />
           )}

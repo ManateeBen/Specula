@@ -8,11 +8,6 @@
 
 [English](#english) · [中文](#中文)
 
-![Electron](https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white)
-![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
-![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
-
 </div>
 
 ---
@@ -42,61 +37,24 @@ with tailored mini-lessons. Your books and API key never leave your machine.
 - **🎯 Weak-point analysis** — After a quiz, the AI diagnoses your weak knowledge points and
   writes targeted mini-lessons.
 - **🔒 Private by design** — Books, reading data, and your encrypted DeepSeek API key are
-  stored locally (SQLite + encrypted local store). Nothing is uploaded except your prompts
-  to the DeepSeek API.
+  stored locally. Nothing is uploaded except your prompts to the DeepSeek API.
 
-### 🛠 Tech Stack
+### 🌟 Highlights
 
-| Area | Stack |
-| --- | --- |
-| Shell / UI | Electron 33 · Vite 6 · React 18 · TypeScript · Tailwind CSS · React Router (HashRouter) · Zustand |
-| Storage | SQLite via `sql.js` (WASM) · encrypted settings via `electron-store` |
-| EPUB | Parsed in the main process with `jszip` + `@xmldom/xmldom`; chapters rendered as HTML |
-| PDF | `pdf.js` / `@react-pdf-viewer` (worker bundled locally) |
-| AI | DeepSeek API (OpenAI-compatible) via the `openai` SDK, streaming |
+- **Four teaching styles** — Not just one-size-fits-all: choose the style that helps you learn best.
+- **Learn by testing** — Quizzes aren't just for scores; they drive the AI to find exactly where you need help.
+- **Targeted mini-lessons** — Skip what you already know and focus on your weak spots.
+- **Real-time streaming** — AI explanations stream in as they're generated, no waiting.
+- **Local-first privacy** — All your data stays on your machine. Only prompts reach the API.
+- **PDF & EPUB support** — One app for both formats, with native reading experiences for each.
 
-### 🚀 Getting Started
+### ⚙️ Quick Start
 
-Requirements: **Node.js 18+** (Node 20/22/24 tested) and npm.
+1. Download and install Specula.
+2. Open **Settings** and paste your [DeepSeek](https://platform.deepseek.com/) API key, then click **Test Connection**.
+3. Import a book and start reading!
 
-```bash
-npm install
-npm run dev        # launch in development
-```
-
-### 📦 Build
-
-```bash
-npm run build:win   # Windows installer → release/Specula Setup 0.1.0.exe
-npm run pack:win    # unpacked build for debugging → release/win-unpacked/Specula.exe
-```
-
-> The installer (NSIS) lets you choose the install location and creates desktop and
-> Start-menu shortcuts. `macOS` (dmg) and `Linux` (AppImage) targets are also configured.
-
-### ⚙️ Configuration
-
-On first run, open **Settings** and paste your [DeepSeek](https://platform.deepseek.com/)
-API key, then click **Test Connection**. The default model is `deepseek-chat`. The key is
-stored encrypted on your machine and is only sent to the DeepSeek API.
-
-### 📁 Data Location
-
-Everything lives under your OS user-data directory (e.g. `%APPDATA%/Specula` on Windows):
-
-- `specula.db` — books, chapters, highlights, quizzes, progress (SQLite)
-- `books/` — imported book files
-- `covers/` — extracted cover images
-- `settings.json` — encrypted app settings (incl. API key)
-
-### 🏗 Architecture Notes
-
-- The Electron **main process is built as CommonJS** (the project is intentionally not
-  `"type": "module"`), because Electron's Node crashes loading these CJS deps via ESM interop.
-- The renderer uses **`HashRouter`** because it is loaded from `file://` in the packaged app.
-- **EPUB** is parsed and rendered without `epub.js` at runtime (it is browser-only and
-  unreliable with in-memory archives in Electron); chapters are produced server-side as
-  self-contained HTML with images inlined, which also enables native text selection.
+> The default model is `deepseek-chat`. Your API key is stored encrypted locally and only sent to the DeepSeek API.
 
 ### 📄 License
 
@@ -124,60 +82,24 @@ Specula 是一款**本地优先**的桌面阅读应用，把任意 PDF 或 EPUB 
   - **类比式** — 用生活化类比理解抽象概念
 - **📝 章节测验** — AI 根据章节内容生成选择题 / 填空题 / 简答题，简答题由 AI 评分。
 - **🎯 薄弱点分析** — 测验后，AI 诊断薄弱知识点并撰写针对性 mini-lesson。
-- **🔒 隐私优先** — 书籍、阅读数据与加密后的 DeepSeek API Key 均存储在本地
-  （SQLite + 加密本地存储），除发送给 DeepSeek API 的提示词外不上传任何内容。
+- **🔒 隐私优先** — 书籍、阅读数据与加密后的 API Key 均存储在本地，除发送给 DeepSeek API 的提示词外不上传任何内容。
 
-### 🛠 技术栈
+### 🌟 亮点
 
-| 模块 | 技术 |
-| --- | --- |
-| 外壳 / 界面 | Electron 33 · Vite 6 · React 18 · TypeScript · Tailwind CSS · React Router (HashRouter) · Zustand |
-| 存储 | `sql.js`（WASM SQLite）· `electron-store`（加密设置） |
-| EPUB | 主进程用 `jszip` + `@xmldom/xmldom` 解析，章节以 HTML 渲染 |
-| PDF | `pdf.js` / `@react-pdf-viewer`（worker 本地打包） |
-| AI | DeepSeek API（OpenAI 兼容），`openai` SDK，流式输出 |
+- **四种教学风格** — 不再千篇一律，选择最适合你的学习方式。
+- **以测促学** — 测验不只是打分，更驱动 AI 精准定位你的薄弱环节。
+- **针对性补课** — 跳过已掌握的内容，直击薄弱点。
+- **实时流式输出** — AI 讲解即时呈现，无需等待。
+- **本地优先隐私** — 所有数据留在本机，只有提示词发送到 API。
+- **PDF & EPUB 双格式** — 一个应用搞定两种格式，各有原生阅读体验。
 
-### 🚀 开发
+### ⚙️ 快速开始
 
-环境要求：**Node.js 18+**（已在 Node 20/22/24 验证）与 npm。
+1. 下载安装 Specula。
+2. 打开「**设置**」，填入 [DeepSeek](https://platform.deepseek.com/) API Key，点击「**测试连接**」。
+3. 导入书籍，开始阅读！
 
-```bash
-npm install
-npm run dev        # 开发模式启动
-```
-
-### 📦 构建
-
-```bash
-npm run build:win   # Windows 安装包 → release/Specula Setup 0.1.0.exe
-npm run pack:win    # 免安装调试版 → release/win-unpacked/Specula.exe
-```
-
-> 安装包（NSIS）支持选择安装目录，并自动创建桌面和开始菜单快捷方式。同时配置了
-> `macOS`（dmg）与 `Linux`（AppImage）构建目标。
-
-### ⚙️ 配置
-
-首次使用请打开「**设置**」，填入 [DeepSeek](https://platform.deepseek.com/) API Key，
-并点击「**测试连接**」。默认模型为 `deepseek-chat`。Key 会被加密存储在本机，仅发送给
-DeepSeek API。
-
-### 📁 数据位置
-
-所有数据位于操作系统用户数据目录（Windows 下为 `%APPDATA%/Specula`）：
-
-- `specula.db` — 书籍、章节、划线、测验、进度（SQLite）
-- `books/` — 导入的书籍文件
-- `covers/` — 提取的封面图片
-- `settings.json` — 加密的应用设置（含 API Key）
-
-### 🏗 架构说明
-
-- Electron **主进程以 CommonJS 构建**（项目特意不使用 `"type": "module"`），因为 Electron
-  的 Node 在通过 ESM 互操作加载这些 CJS 依赖时会崩溃。
-- 渲染端使用 **`HashRouter`**，因为打包后页面以 `file://` 加载。
-- **EPUB** 运行时不使用 `epub.js`（它是纯浏览器库，在 Electron 中用内存归档渲染不稳定）；
-  章节在主进程侧生成为图片内联的自包含 HTML，同时获得原生文本选区能力。
+> 默认模型为 `deepseek-chat`。API Key 加密存储在本机，仅发送给 DeepSeek API。
 
 ### 📄 许可证
 

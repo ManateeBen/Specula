@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Chapter } from '../../types'
+import type { Chapter, ImageSelectionInfo } from '../../types'
 
 interface Props {
   bookId: string
@@ -7,6 +7,7 @@ interface Props {
   initialChapterId?: string | null
   onProgress: (chapterId: string | null, position: string) => void
   onTextSelect: (text: string, context: string, rect: DOMRect) => void
+  onImageSelect?: (info: ImageSelectionInfo) => void
 }
 
 // We render EPUB chapters ourselves (chapter HTML fetched from the main process
@@ -19,6 +20,7 @@ export default function EpubReader({
   initialChapterId,
   onProgress,
   onTextSelect,
+  onImageSelect,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [currentChapterId, setCurrentChapterId] = useState<string | null>(
@@ -68,6 +70,27 @@ export default function EpubReader({
     onTextSelect(text, context, rect)
   }
 
+  // Click an inlined image to ask the vision model to explain it.
+  const handleClick = (e: React.MouseEvent) => {
+    if (!onImageSelect) return
+    const target = e.target as HTMLElement
+    if (target.tagName !== 'IMG') return
+    const src = target.getAttribute('src') || ''
+    if (!src.startsWith('data:image/')) return
+    const alt = target.getAttribute('alt') || ''
+    const figcaption =
+      target.closest('figure')?.querySelector('figcaption')?.textContent?.trim() || ''
+    const context = target.parentElement?.textContent?.slice(0, 500) || ''
+    const rect = target.getBoundingClientRect()
+    onImageSelect({
+      imageDataUrl: src,
+      imageAltText: alt,
+      imageCaption: figcaption,
+      imageContext: context,
+      rect,
+    })
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div ref={scrollRef} onMouseUp={handleMouseUp} className="epub-container flex-1 overflow-y-auto">
@@ -75,8 +98,9 @@ export default function EpubReader({
           <div className="p-10 text-center text-sm text-gray-500">加载章节中...</div>
         ) : (
           <div
-            className="epub-content mx-auto max-w-3xl px-8 py-8"
+            className="epub-content epub-content--images mx-auto max-w-3xl px-8 py-8"
             dangerouslySetInnerHTML={{ __html: html }}
+            onClick={handleClick}
           />
         )}
       </div>

@@ -18,6 +18,8 @@ import {
 import {
   explainText,
   explainTextStream,
+  explainImageStream,
+  testVision,
   generateQuiz,
   gradeQuiz,
   analyzeWeakPoints,
@@ -30,6 +32,7 @@ import {
 import { getSettings, setSettings } from '../services/settings.service'
 import type {
   ExplainRequest,
+  ImageExplainRequest,
   GenerateQuizRequest,
   GradeQuizRequest,
   AnalyzeWeakPointsRequest,
@@ -93,6 +96,10 @@ export function registerIpcHandlers(): void {
     if (!mainWindow) throw new Error('Window not available')
     await explainTextStream(req, mainWindow)
   })
+  ipcMain.handle('ai:explainImageStream', async (_e, req: ImageExplainRequest) => {
+    if (!mainWindow) throw new Error('Window not available')
+    await explainImageStream(req, mainWindow)
+  })
   ipcMain.handle('ai:generateQuiz', (_e, req: GenerateQuizRequest) => generateQuiz(req))
   ipcMain.handle('ai:gradeQuiz', (_e, req: GradeQuizRequest) => gradeQuiz(req))
   ipcMain.handle('ai:analyzeWeakPoints', (_e, req: AnalyzeWeakPointsRequest) => analyzeWeakPoints(req))
@@ -110,4 +117,5 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('settings:get', () => getSettings())
   ipcMain.handle('settings:set', (_e, partial: Partial<AppSettings>) => setSettings(partial))
   ipcMain.handle('settings:testConnection', () => testConnection())
+  ipcMain.handle('settings:testVision', () => testVision())
 }

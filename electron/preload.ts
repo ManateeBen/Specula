@@ -37,6 +37,7 @@ const api: SpeculaAPI = {
   ai: {
     explain: (req: ExplainRequest) => ipcRenderer.invoke('ai:explain', req),
     explainStream: (req: ExplainRequest) => ipcRenderer.invoke('ai:explainStream', req),
+    explainImageStream: (req) => ipcRenderer.invoke('ai:explainImageStream', req),
     onExplainChunk: (callback) => {
       const handler = (_: unknown, chunk: string) => callback(chunk)
       ipcRenderer.on('ai:explain-chunk', handler)
@@ -65,6 +66,7 @@ const api: SpeculaAPI = {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (settings: Partial<AppSettings>) => ipcRenderer.invoke('settings:set', settings),
     testConnection: () => ipcRenderer.invoke('settings:testConnection'),
+    testVision: () => ipcRenderer.invoke('settings:testVision'),
   },
 }
 

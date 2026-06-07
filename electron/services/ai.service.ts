@@ -1,7 +1,7 @@
 import OpenAI from 'openai'
 import { BrowserWindow } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
-import { getApiKey, getModel, getDefaultTeachingMode } from './settings.service'
+import { getApiKey, getModel, getDefaultTeachingMode, getVisionConfig } from './settings.service'
 import { runSql, queryOne, queryAll } from '../db'
 import {
   TEACHING_PROMPTS,
@@ -9,11 +9,13 @@ import {
   GRADE_SYSTEM_PROMPT,
   WEAK_POINTS_SYSTEM_PROMPT,
   buildExplainUserMessage,
+  buildImageUserMessage,
   truncateContent,
   parseJsonFromResponse,
 } from './prompts'
 import type {
   ExplainRequest,
+  ImageExplainRequest,
   GenerateQuizRequest,
   GradeQuizRequest,
   AnalyzeWeakPointsRequest,
@@ -32,6 +34,55 @@ function createClient(): OpenAI {
     apiKey,
     baseURL: 'https://api.deepseek.com',
   })
+}
+
+function createVisionClient(): { client: OpenAI; model: string } {
+  const { apiKey, baseURL, model } = getVisionConfig()
+  if (!apiKey) {
+    throw new Error('请先在设置中配置「视觉模型」API Key（用于图片解释）')
+  }
+  return { client: new OpenAI({ apiKey, baseURL }), model }
+}
+
+export async function testVision(): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { client, model } = createVisionClient()
+    await client.chat.completions.create({
+      model,
+      messages: [{ role: 'user', content: 'Hi' }],
+      max_tokens: 5,
+    })
+    return { ok: true, message: '连接成功' }
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : '连接失败' }
+  }
+}
+
+export async function explainImageStream(req: ImageExplainRequest, win: BrowserWindow): Promise<void> {
+  const { client, model } = createVisionClient()
+  const stream = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: 'system', content: TEACHING_PROMPTS[req.teachingMode] },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: buildImageUserMessage(req) },
+          { type: 'image_url', image_url: { url: req.imageDataUrl } },
+        ],
+      },
+    ],
+    temperature: 0.7,
+    stream: true,
+  })
+
+  for await (const chunk of stream) {
+    const content = chunk.choices[0]?.delta?.content || ''
+    if (content) {
+      win.webContents.send('ai:explain-chunk', content)
+    }
+  }
+  win.webContents.send('ai:explain-done')
 }
 
 export async function testConnection(): Promise<{ ok: boolean; message: string }> {

@@ -12,6 +12,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   model: 'deepseek-chat',
   defaultTeachingMode: 'direct' as TeachingMode,
   darkMode: false,
+  visionApiKey: '',
+  visionBaseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  visionModel: 'qwen-vl-max',
   loaded: false,
   load: async () => {
     const settings = await window.specula.settings.get()

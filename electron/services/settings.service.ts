@@ -6,6 +6,9 @@ interface StoreSchema {
   model: string
   defaultTeachingMode: TeachingMode
   darkMode: boolean
+  visionApiKey: string
+  visionBaseURL: string
+  visionModel: string
 }
 
 const store = new Store<StoreSchema>({
@@ -16,6 +19,9 @@ const store = new Store<StoreSchema>({
     model: 'deepseek-chat',
     defaultTeachingMode: 'direct',
     darkMode: false,
+    visionApiKey: '',
+    visionBaseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    visionModel: 'qwen-vl-max',
   },
 })
 
@@ -25,6 +31,9 @@ export function getSettings(): AppSettings {
     model: store.get('model'),
     defaultTeachingMode: store.get('defaultTeachingMode'),
     darkMode: store.get('darkMode'),
+    visionApiKey: store.get('visionApiKey'),
+    visionBaseURL: store.get('visionBaseURL'),
+    visionModel: store.get('visionModel'),
   }
 }
 
@@ -33,7 +42,18 @@ export function setSettings(partial: Partial<AppSettings>): AppSettings {
   if (partial.model !== undefined) store.set('model', partial.model)
   if (partial.defaultTeachingMode !== undefined) store.set('defaultTeachingMode', partial.defaultTeachingMode)
   if (partial.darkMode !== undefined) store.set('darkMode', partial.darkMode)
+  if (partial.visionApiKey !== undefined) store.set('visionApiKey', partial.visionApiKey)
+  if (partial.visionBaseURL !== undefined) store.set('visionBaseURL', partial.visionBaseURL)
+  if (partial.visionModel !== undefined) store.set('visionModel', partial.visionModel)
   return getSettings()
+}
+
+export function getVisionConfig(): { apiKey: string; baseURL: string; model: string } {
+  return {
+    apiKey: store.get('visionApiKey'),
+    baseURL: store.get('visionBaseURL') || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    model: store.get('visionModel') || 'qwen-vl-max',
+  }
 }
 
 export function getApiKey(): string {

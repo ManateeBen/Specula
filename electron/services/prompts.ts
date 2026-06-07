@@ -103,6 +103,22 @@ export function buildExplainUserMessage(req: {
   return parts.join('\n\n')
 }
 
+export function buildImageUserMessage(req: {
+  altText: string
+  caption: string
+  context: string
+  bookTitle?: string
+  chapterTitle?: string
+}): string {
+  const parts = ['请讲解这张图片（可能是图表、插图、示意图、流程图或照片）：说明它表达的内容、关键元素及其含义。']
+  if (req.bookTitle) parts.push(`书籍：${req.bookTitle}`)
+  if (req.chapterTitle) parts.push(`章节：${req.chapterTitle}`)
+  if (req.caption) parts.push(`图注：${req.caption}`)
+  if (req.altText) parts.push(`替代文字：${req.altText}`)
+  if (req.context) parts.push(`周围正文（供参考）：\n${req.context}`)
+  return parts.join('\n')
+}
+
 export function truncateContent(content: string, maxChars = 12000): string {
   if (content.length <= maxChars) return content
   const half = Math.floor(maxChars / 2)
