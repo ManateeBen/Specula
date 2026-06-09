@@ -13,6 +13,7 @@ import {
   getProgress,
   listHighlights,
   createHighlight,
+  createHighlightsFromWeakPoints,
   deleteHighlight,
 } from '../services/book.service'
 import {
@@ -28,6 +29,7 @@ import {
   saveQuizAttempt,
   getQuizAttempts,
   getLatestQuizAttempt,
+  getQuizHistoryByChapter,
 } from '../services/ai.service'
 import { getSettings, setSettings } from '../services/settings.service'
 import type {
@@ -45,28 +47,46 @@ export function setMainWindow(win: BrowserWindow): void {
   mainWindow = win
 }
 
+// Wrap every handler in a uniform try/catch so failures surface to the renderer
+// as a clean Error (rejected invoke) and get logged in the main process,
+// instead of leaking raw/serialized internals or failing silently.
+function handle(
+  channel: string,
+  fn: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => unknown
+): void {
+  ipcMain.handle(channel, async (event, ...args) => {
+    try {
+      return await fn(event, ...args)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error(`[IPC] ${channel} failed:`, err)
+      throw new Error(message)
+    }
+  })
+}
+
 export function registerIpcHandlers(): void {
-  ipcMain.handle('books:import', () => importBook())
-  ipcMain.handle('books:list', () => listBooks())
-  ipcMain.handle('books:get', (_e, id: string) => getBook(id))
-  ipcMain.handle('books:getFileData', (_e, id: string) => getFileData(id))
-  ipcMain.handle('books:delete', (_e, id: string) => deleteBook(id))
-  ipcMain.handle('books:getProgress', (_e, bookId: string) => getProgress(bookId))
-  ipcMain.handle('books:saveProgress', (_e, data: { bookId: string; chapterId: string | null; position: string }) => {
+  handle('books:import', () => importBook())
+  handle('books:list', () => listBooks())
+  handle('books:get', (_e, id: string) => getBook(id))
+  handle('books:getFileData', (_e, id: string) => getFileData(id))
+  handle('books:delete', (_e, id: string) => deleteBook(id))
+  handle('books:getProgress', (_e, bookId: string) => getProgress(bookId))
+  handle('books:saveProgress', (_e, data: { bookId: string; chapterId: string | null; position: string }) => {
     saveProgress(data.bookId, data.chapterId, data.position)
   })
-  ipcMain.handle('books:getCoverUrl', (_e, coverPath: string | null) => {
+  handle('books:getCoverUrl', (_e, coverPath: string | null) => {
     if (!coverPath) return null
     return `file://${coverPath.replace(/\\/g, '/')}`
   })
 
-  ipcMain.handle('chapters:listByBook', (_e, bookId: string) => listChapters(bookId))
-  ipcMain.handle('chapters:getContent', (_e, chapterId: string) => getChapterContent(chapterId))
-  ipcMain.handle('epub:getChapterHtml', (_e, data: { bookId: string; href: string }) =>
+  handle('chapters:listByBook', (_e, bookId: string) => listChapters(bookId))
+  handle('chapters:getContent', (_e, chapterId: string) => getChapterContent(chapterId))
+  handle('epub:getChapterHtml', (_e, data: { bookId: string; href: string }) =>
     getEpubChapterHtml(data.bookId, data.href)
   )
 
-  ipcMain.handle('highlights:listByBook', (_e, bookId: string) => {
+  handle('highlights:listByBook', (_e, bookId: string) => {
     return listHighlights(bookId).map((h) => ({
       id: h.id,
       bookId: h.book_id,
@@ -75,47 +95,69 @@ export function registerIpcHandlers(): void {
       context: h.context,
       aiExplanation: h.ai_explanation,
       teachingMode: h.teaching_mode,
+      source: h.source || 'user',
+      weakPointTopic: h.weak_point_topic || null,
+      weakPointIndex: h.weak_point_index ?? null,
       createdAt: h.created_at,
     }))
   })
-  ipcMain.handle('highlights:create', (_e, data: {
+  handle('highlights:create', (_e, data: {
     bookId: string
     chapterId: string | null
     selectedText: string
     context: string
     aiExplanation: string | null
     teachingMode: string | null
+    source?: string
+    weakPointTopic?: string | null
   }) => {
     const id = createHighlight(data)
-    return { id, ...data, createdAt: new Date().toISOString() }
+    return {
+      id,
+      ...data,
+      source: data.source || 'user',
+      weakPointTopic: data.weakPointTopic || null,
+      weakPointIndex: null,
+      createdAt: new Date().toISOString(),
+    }
   })
-  ipcMain.handle('highlights:delete', (_e, id: string) => deleteHighlight(id))
+  handle('highlights:createFromWeakPoints', (_e, data: {
+    bookId: string
+    chapterId: string
+    weakPoints: import('../../src/types').WeakPoint[]
+  }) => {
+    return createHighlightsFromWeakPoints(data)
+  })
+  handle('highlights:delete', (_e, id: string) => deleteHighlight(id))
 
-  ipcMain.handle('ai:explain', (_e, req: ExplainRequest) => explainText(req))
-  ipcMain.handle('ai:explainStream', async (_e, req: ExplainRequest) => {
+  handle('ai:explain', (_e, req: ExplainRequest) => explainText(req))
+  handle('ai:explainStream', async (_e, req: ExplainRequest) => {
     if (!mainWindow) throw new Error('Window not available')
     await explainTextStream(req, mainWindow)
   })
-  ipcMain.handle('ai:explainImageStream', async (_e, req: ImageExplainRequest) => {
+  handle('ai:explainImageStream', async (_e, req: ImageExplainRequest) => {
     if (!mainWindow) throw new Error('Window not available')
     await explainImageStream(req, mainWindow)
   })
-  ipcMain.handle('ai:generateQuiz', (_e, req: GenerateQuizRequest) => generateQuiz(req))
-  ipcMain.handle('ai:gradeQuiz', (_e, req: GradeQuizRequest) => gradeQuiz(req))
-  ipcMain.handle('ai:analyzeWeakPoints', (_e, req: AnalyzeWeakPointsRequest) => analyzeWeakPoints(req))
+  handle('ai:generateQuiz', (_e, req: GenerateQuizRequest) => generateQuiz(req))
+  handle('ai:gradeQuiz', (_e, req: GradeQuizRequest) => gradeQuiz(req))
+  handle('ai:analyzeWeakPoints', (_e, req: AnalyzeWeakPointsRequest) => analyzeWeakPoints(req))
 
-  ipcMain.handle('quiz:getByChapter', (_e, chapterId: string) => getQuizByChapter(chapterId))
-  ipcMain.handle('quiz:saveAttempt', (_e, data: {
+  handle('quiz:getByChapter', (_e, chapterId: string) => getQuizByChapter(chapterId))
+  handle('quiz:saveAttempt', (_e, data: {
     quizId: string
     answers: { questionId: string; answer: string }[]
     score: number
     weakPoints: import('../../src/types').WeakPoint[]
+    results: { questionId: string; correct: boolean; feedback: string }[]
+    timeTakenMs: number
   }) => saveQuizAttempt(data))
-  ipcMain.handle('quiz:getAttempts', (_e, quizId: string) => getQuizAttempts(quizId))
-  ipcMain.handle('quiz:getLatestAttempt', (_e, quizId: string) => getLatestQuizAttempt(quizId))
+  handle('quiz:getAttempts', (_e, quizId: string) => getQuizAttempts(quizId))
+  handle('quiz:getLatestAttempt', (_e, quizId: string) => getLatestQuizAttempt(quizId))
+  handle('quiz:getHistoryByChapter', (_e, chapterId: string) => getQuizHistoryByChapter(chapterId))
 
-  ipcMain.handle('settings:get', () => getSettings())
-  ipcMain.handle('settings:set', (_e, partial: Partial<AppSettings>) => setSettings(partial))
-  ipcMain.handle('settings:testConnection', () => testConnection())
-  ipcMain.handle('settings:testVision', () => testVision())
+  handle('settings:get', () => getSettings())
+  handle('settings:set', (_e, partial: Partial<AppSettings>) => setSettings(partial))
+  handle('settings:testConnection', () => testConnection())
+  handle('settings:testVision', () => testVision())
 }

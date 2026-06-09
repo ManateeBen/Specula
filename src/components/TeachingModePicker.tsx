@@ -7,7 +7,19 @@ interface Props {
   compact?: boolean
 }
 
-const modes: TeachingMode[] = ['direct', 'socratic', 'feynman', 'analogy']
+const modes: TeachingMode[] = [
+  'direct',
+  'socratic',
+  'feynman',
+  'analogy',
+  'case',
+  'contrast',
+  'story',
+  'structure',
+  'summary',
+  'practice',
+  'history',
+]
 
 export default function TeachingModePicker({ value, onChange, compact }: Props) {
   if (compact) {

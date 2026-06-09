@@ -25,7 +25,7 @@ export default function PdfReader({
   // Bumping this key remounts the Viewer so it honors a new initialPage on jump.
   const [viewerKey, setViewerKey] = useState(0)
 
-  const defaultLayoutPluginInstance = defaultLayoutPlugin()
+  const defaultLayoutPluginInstance = useMemo(() => defaultLayoutPlugin(), [])
 
   // pdf.js transfers (and detaches) the ArrayBuffer it receives, so hand each
   // Viewer mount its own copy — keeps `data` reusable across chapter jumps.

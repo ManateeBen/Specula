@@ -1,19 +1,37 @@
-import { useEffect, useState, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Highlighter, ClipboardList, PanelRightClose, PanelRightOpen } from 'lucide-react'
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
+import { useParams, Link, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, Highlighter, ClipboardList, PanelRightClose, PanelRightOpen, AlertTriangle, History } from 'lucide-react'
 import EpubReader from '../components/epub/EpubReader'
-import PdfReader from '../components/pdf/PdfReader'
 import HighlightPopover from '../components/HighlightPopover'
 import ImageExplanationPopover from '../components/ImageExplanationPopover'
 import type { Book, Chapter, Highlight, ImageSelectionInfo } from '../types'
+import {
+  buildWeakPointIndexMap,
+  getWeakPointIndex,
+  getWeakPointSidebarStyle,
+  sortHighlightsForDisplay,
+} from '../utils/weakPointStyle'
+
+// Lazy so the PDF vendor chunk only loads for PDF books.
+const PdfReader = lazy(() => import('../components/pdf/PdfReader'))
+
+type HighlightFilter = 'all' | 'user' | 'quiz'
 
 export default function Reader() {
   const { bookId } = useParams<{ bookId: string }>()
+  const [searchParams] = useSearchParams()
+  const deepLinkChapterId = searchParams.get('chapterId')
+  const deepLinkHighlight = searchParams.get('highlight')
+
   const [book, setBook] = useState<Book | null>(null)
   const [fileData, setFileData] = useState<Uint8Array | null>(null)
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [highlights, setHighlights] = useState<Highlight[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [highlightFilter, setHighlightFilter] = useState<HighlightFilter>('all')
+  const [unlocatedIds, setUnlocatedIds] = useState<string[]>([])
+  const [error, setError] = useState('')
+  const [ready, setReady] = useState(false)
   const [selection, setSelection] = useState<{
     text: string
     context: string
@@ -25,34 +43,87 @@ export default function Reader() {
 
   useEffect(() => {
     if (!bookId) return
+    let cancelled = false
     const load = async () => {
-      const b = await window.specula.books.get(bookId)
-      setBook(b)
-      // Only the PDF reader needs the raw bytes; EPUB renders chapter HTML via IPC.
-      if (b?.format === 'pdf') {
-        setFileData(await window.specula.books.getFileData(bookId))
+      setReady(false)
+      setError('')
+      try {
+        const b = await window.specula.books.get(bookId)
+        if (cancelled) return
+        if (!b) {
+          setError('未找到该书籍')
+          return
+        }
+        setBook(b)
+        // Only the PDF reader needs the raw bytes; EPUB renders chapter HTML via IPC.
+        if (b.format === 'pdf') {
+          const data = await window.specula.books.getFileData(bookId)
+          if (cancelled) return
+          setFileData(data)
+        }
+        const chs = await window.specula.chapters.listByBook(bookId)
+        if (cancelled) return
+        setChapters(chs)
+
+        const progress = await window.specula.books.getProgress(bookId)
+        if (cancelled) return
+
+        // A deep link (?chapterId=&highlight=) takes precedence over saved progress.
+        if (deepLinkChapterId) {
+          setCurrentChapterId(deepLinkChapterId)
+          const ch = chs.find((c) => c.id === deepLinkChapterId)
+          if (b.format === 'pdf' && ch) setInitialPosition(ch.startRef)
+          else setInitialPosition('')
+        } else if (progress) {
+          setCurrentChapterId(progress.chapterId)
+          setInitialPosition(progress.position)
+        }
+
+        const hl = await window.specula.highlights.listByBook(bookId)
+        if (cancelled) return
+        setHighlights(hl)
+        setReady(true)
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : '加载书籍失败')
       }
-      const chs = await window.specula.chapters.listByBook(bookId)
-      setChapters(chs)
-      const progress = await window.specula.books.getProgress(bookId)
-      if (progress) {
-        setCurrentChapterId(progress.chapterId)
-        setInitialPosition(progress.position)
-      }
-      const hl = await window.specula.highlights.listByBook(bookId)
-      setHighlights(hl)
     }
     load()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookId, deepLinkChapterId])
+
+  // Debounced progress saving: page turns / scrolls happen rapidly, so batch
+  // them into a single write and flush any pending write on unmount.
+  const pendingProgress = useRef<{ chapterId: string | null; position: string } | null>(null)
+  const progressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const flushProgress = useCallback(() => {
+    if (progressTimer.current) {
+      clearTimeout(progressTimer.current)
+      progressTimer.current = null
+    }
+    const p = pendingProgress.current
+    if (p && bookId) {
+      pendingProgress.current = null
+      void window.specula.books.saveProgress({ bookId, chapterId: p.chapterId, position: p.position })
+    }
   }, [bookId])
 
   const handleProgress = useCallback(
-    async (chapterId: string | null, position: string) => {
-      if (!bookId) return
+    (chapterId: string | null, position: string) => {
       setCurrentChapterId(chapterId)
-      await window.specula.books.saveProgress({ bookId, chapterId, position })
+      pendingProgress.current = { chapterId, position }
+      if (progressTimer.current) clearTimeout(progressTimer.current)
+      progressTimer.current = setTimeout(flushProgress, 600)
     },
-    [bookId]
+    [flushProgress]
   )
+
+  useEffect(() => {
+    return () => flushProgress()
+  }, [flushProgress])
 
   const handleTextSelect = useCallback((text: string, context: string, rect: DOMRect) => {
     setImageSelection(null)
@@ -71,8 +142,26 @@ export default function Reader() {
   }
 
   const currentChapter = chapters.find((c) => c.id === currentChapterId)
+  // Notes sidebar shows only the current chapter's highlights.
+  const chapterHighlights = highlights.filter((h) => h.chapterId === currentChapterId)
+  const wpIndexMap = buildWeakPointIndexMap(chapterHighlights)
+  const displayedHighlights = sortHighlightsForDisplay(
+    chapterHighlights.filter((h) => highlightFilter === 'all' || h.source === highlightFilter),
+    wpIndexMap
+  )
 
-  if (!book || (book.format === 'pdf' && !fileData)) {
+  if (error) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4">
+        <p className="text-red-600 dark:text-red-400">{error}</p>
+        <Link to="/" className="btn-secondary">
+          返回书库
+        </Link>
+      </div>
+    )
+  }
+
+  if (!book || !ready || (book.format === 'pdf' && !fileData)) {
     return <div className="flex h-full items-center justify-center text-gray-500">加载中...</div>
   }
 
@@ -93,13 +182,22 @@ export default function Reader() {
           </div>
           <div className="flex items-center gap-2">
             {currentChapterId && (
-              <Link
-                to={`/quiz/${bookId}/${currentChapterId}`}
-                className="btn-secondary py-1.5 text-xs"
-              >
-                <ClipboardList className="h-3.5 w-3.5" />
-                章节测验
-              </Link>
+              <>
+                <Link
+                  to={`/quiz/${bookId}/${currentChapterId}`}
+                  className="btn-secondary py-1.5 text-xs"
+                >
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  章节测验
+                </Link>
+                <Link
+                  to={`/quiz-history/${bookId}/${currentChapterId}`}
+                  className="btn-secondary py-1.5 text-xs"
+                >
+                  <History className="h-3.5 w-3.5" />
+                  历史
+                </Link>
+              </>
             )}
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -120,18 +218,29 @@ export default function Reader() {
               bookId={book.id}
               chapters={chapters}
               initialChapterId={currentChapterId}
+              initialPosition={initialPosition}
+              highlightExcerpt={deepLinkHighlight}
+              highlights={highlights}
               onProgress={handleProgress}
               onTextSelect={handleTextSelect}
               onImageSelect={handleImageSelect}
+              onHighlightsChange={refreshHighlights}
+              onUnlocatedChange={setUnlocatedIds}
             />
           ) : (
-            <PdfReader
-              data={fileData!}
-              chapters={chapters}
-              initialPosition={initialPosition}
-              onProgress={handleProgress}
-              onTextSelect={handleTextSelect}
-            />
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center text-gray-500">加载阅读器...</div>
+              }
+            >
+              <PdfReader
+                data={fileData!}
+                chapters={chapters}
+                initialPosition={initialPosition}
+                onProgress={handleProgress}
+                onTextSelect={handleTextSelect}
+              />
+            </Suspense>
           )}
 
           {selection && bookId && (
@@ -165,21 +274,73 @@ export default function Reader() {
           <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-700">
             <div className="flex items-center gap-2 text-sm font-medium">
               <Highlighter className="h-4 w-4 text-yellow-500" />
-              划线笔记 ({highlights.length})
+              划线笔记 ({chapterHighlights.length})
+            </div>
+            <div className="mt-2 flex gap-1">
+              {([
+                { key: 'all' as const, label: '全部' },
+                { key: 'user' as const, label: '我的划线' },
+                { key: 'quiz' as const, label: '薄弱点' },
+              ]).map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => setHighlightFilter(f.key)}
+                  className={`rounded px-2 py-0.5 text-xs ${
+                    highlightFilter === f.key
+                      ? 'bg-specula-100 text-specula-700 dark:bg-specula-900/30 dark:text-specula-400'
+                      : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
             </div>
           </div>
           <div className="space-y-2 p-3">
-            {highlights.length === 0 ? (
+            {displayedHighlights.length === 0 ? (
               <p className="py-8 text-center text-xs text-gray-500">
-                选中文字即可 AI 解释并保存划线
+                {highlightFilter === 'quiz' ? '本章暂无薄弱点标记' : '选中文字即可 AI 解释并保存划线'}
               </p>
             ) : (
-              highlights.map((h) => (
-                <div key={h.id} className="card p-3">
-                  <blockquote className="border-l-2 border-yellow-400 pl-2 text-xs italic">
-                    {h.selectedText.slice(0, 100)}
-                    {h.selectedText.length > 100 ? '...' : ''}
-                  </blockquote>
+              displayedHighlights.map((h) => {
+                const wpIndex = getWeakPointIndex(h, wpIndexMap)
+                const wpStyle = wpIndex ? getWeakPointSidebarStyle(wpIndex) : null
+                return (
+                <div
+                  key={h.id}
+                  className={`card p-3 ${h.source === 'quiz' && wpStyle ? `border-l-2 ${wpStyle.border}` : ''}`}
+                >
+                  <div className="flex items-start gap-2">
+                    {h.source === 'quiz' && wpIndex && wpStyle ? (
+                      <span
+                        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${wpStyle.badge}`}
+                        title={`薄弱点 #${wpIndex}`}
+                      >
+                        {wpIndex}
+                      </span>
+                    ) : h.source === 'quiz' ? (
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-500" />
+                    ) : null}
+                    <blockquote className={`flex-1 border-l-2 pl-2 text-xs italic ${
+                      h.source === 'quiz' && wpStyle
+                        ? wpStyle.quote
+                        : 'border-l-yellow-400'
+                    }`}>
+                      {h.selectedText.slice(0, 100)}
+                      {h.selectedText.length > 100 ? '...' : ''}
+                    </blockquote>
+                  </div>
+                  {h.source === 'quiz' && h.weakPointTopic && (
+                    <div className={`mt-1 text-xs font-medium ${wpStyle?.topic ?? 'text-orange-600 dark:text-orange-400'}`}>
+                      {wpIndex ? `#${wpIndex} ` : ''}{h.weakPointTopic}
+                    </div>
+                  )}
+                  {book.format === 'epub' && unlocatedIds.includes(h.id) && (
+                    <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-400">
+                      <AlertTriangle className="h-3 w-3" />
+                      未能在正文定位（仅在此显示）
+                    </div>
+                  )}
                   {h.aiExplanation && (
                     <p className="mt-2 line-clamp-4 text-xs text-gray-600 dark:text-gray-400">
                       {h.aiExplanation}
@@ -195,7 +356,7 @@ export default function Reader() {
                     删除
                   </button>
                 </div>
-              ))
+              )})
             )}
           </div>
         </aside>

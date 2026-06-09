@@ -8,6 +8,7 @@ import type {
   AppSettings,
   ReadingProgress,
   Highlight,
+  WeakPoint,
 } from '../src/types'
 
 const api: SpeculaAPI = {
@@ -33,23 +34,26 @@ const api: SpeculaAPI = {
     create: (data) => ipcRenderer.invoke('highlights:create', data) as Promise<Highlight>,
     listByBook: (bookId) => ipcRenderer.invoke('highlights:listByBook', bookId),
     delete: (id) => ipcRenderer.invoke('highlights:delete', id),
+    createFromWeakPoints: (data: { bookId: string; chapterId: string; weakPoints: WeakPoint[] }) =>
+      ipcRenderer.invoke('highlights:createFromWeakPoints', data) as Promise<Highlight[]>,
   },
   ai: {
     explain: (req: ExplainRequest) => ipcRenderer.invoke('ai:explain', req),
     explainStream: (req: ExplainRequest) => ipcRenderer.invoke('ai:explainStream', req),
     explainImageStream: (req) => ipcRenderer.invoke('ai:explainImageStream', req),
-    onExplainChunk: (callback) => {
+    onExplainChunk: (callback, onError) => {
       const handler = (_: unknown, chunk: string) => callback(chunk)
+      const errorHandler = (_: unknown, message: string) => onError?.(message)
+      const cleanup = () => {
+        ipcRenderer.removeListener('ai:explain-chunk', handler)
+        ipcRenderer.removeListener('ai:explain-done', doneHandler)
+        ipcRenderer.removeListener('ai:explain-error', errorHandler)
+      }
+      const doneHandler = () => cleanup()
       ipcRenderer.on('ai:explain-chunk', handler)
-      const doneHandler = () => {
-        ipcRenderer.removeListener('ai:explain-chunk', handler)
-        ipcRenderer.removeListener('ai:explain-done', doneHandler)
-      }
       ipcRenderer.on('ai:explain-done', doneHandler)
-      return () => {
-        ipcRenderer.removeListener('ai:explain-chunk', handler)
-        ipcRenderer.removeListener('ai:explain-done', doneHandler)
-      }
+      ipcRenderer.on('ai:explain-error', errorHandler)
+      return cleanup
     },
     generateQuiz: (req: GenerateQuizRequest) => ipcRenderer.invoke('ai:generateQuiz', req),
     gradeQuiz: (req: GradeQuizRequest) => ipcRenderer.invoke('ai:gradeQuiz', req),
@@ -61,6 +65,7 @@ const api: SpeculaAPI = {
     saveAttempt: (attempt) => ipcRenderer.invoke('quiz:saveAttempt', attempt),
     getAttempts: (quizId) => ipcRenderer.invoke('quiz:getAttempts', quizId),
     getLatestAttempt: (quizId) => ipcRenderer.invoke('quiz:getLatestAttempt', quizId),
+    getHistoryByChapter: (chapterId) => ipcRenderer.invoke('quiz:getHistoryByChapter', chapterId),
   },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),

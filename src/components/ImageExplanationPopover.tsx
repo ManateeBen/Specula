@@ -36,9 +36,16 @@ export default function ImageExplanationPopover({
     setError('')
     setStreaming(true)
 
-    const cleanup = window.specula.ai.onExplainChunk((chunk) => {
-      setExplanation((prev) => prev + chunk)
-    })
+    const cleanup = window.specula.ai.onExplainChunk(
+      (chunk) => {
+        setExplanation((prev) => prev + chunk)
+      },
+      (message) => {
+        setError(message || '图片解释失败')
+        setLoading(false)
+        setStreaming(false)
+      }
+    )
 
     try {
       await window.specula.ai.explainImageStream({
@@ -68,6 +75,7 @@ export default function ImageExplanationPopover({
       context: selection.imageContext,
       aiExplanation: explanation || null,
       teachingMode: mode,
+      source: 'user',
     })
     onSaved()
     onClose()

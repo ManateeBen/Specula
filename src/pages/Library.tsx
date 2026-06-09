@@ -8,6 +8,7 @@ export default function Library() {
   const [covers, setCovers] = useState<Record<string, string | null>>({})
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
+  const [error, setError] = useState('')
 
   const loadBooks = async () => {
     setLoading(true)
@@ -28,9 +29,12 @@ export default function Library() {
 
   const handleImport = async () => {
     setImporting(true)
+    setError('')
     try {
       const book = await window.specula.books.import()
       if (book) await loadBooks()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '导入书籍失败')
     } finally {
       setImporting(false)
     }
@@ -40,8 +44,12 @@ export default function Library() {
     e.preventDefault()
     e.stopPropagation()
     if (confirm('确定删除这本书吗？')) {
-      await window.specula.books.delete(id)
-      await loadBooks()
+      try {
+        await window.specula.books.delete(id)
+        await loadBooks()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '删除书籍失败')
+      }
     }
   }
 
@@ -60,6 +68,12 @@ export default function Library() {
             {importing ? '导入中...' : '导入书籍'}
           </button>
         </div>
+
+        {error && (
+          <div className="card mb-4 border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+            {error}
+          </div>
+        )}
 
         {loading ? (
           <div className="py-20 text-center text-gray-500">加载中...</div>

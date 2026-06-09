@@ -1,6 +1,17 @@
 export type BookFormat = 'epub' | 'pdf'
 
-export type TeachingMode = 'direct' | 'socratic' | 'feynman' | 'analogy'
+export type TeachingMode =
+  | 'direct'
+  | 'socratic'
+  | 'feynman'
+  | 'analogy'
+  | 'case'
+  | 'contrast'
+  | 'story'
+  | 'structure'
+  | 'summary'
+  | 'practice'
+  | 'history'
 
 export interface Book {
   id: string
@@ -36,6 +47,9 @@ export interface Highlight {
   context: string
   aiExplanation: string | null
   teachingMode: TeachingMode | null
+  source: 'user' | 'quiz'
+  weakPointTopic: string | null
+  weakPointIndex: number | null
   createdAt: string
 }
 
@@ -67,6 +81,9 @@ export interface WeakPoint {
   reason: string
   category: 'concept_confusion' | 'missing_detail' | 'misunderstanding'
   miniLesson: string
+  sourceExcerpt: string
+  anchorChunkId?: string
+  anchorQuote?: string
 }
 
 export interface QuizAttempt {
@@ -75,6 +92,9 @@ export interface QuizAttempt {
   answers: QuizAnswer[]
   score: number
   weakPoints: WeakPoint[]
+  results: { questionId: string; correct: boolean; feedback: string }[]
+  timeTakenMs: number
+  completedAt: string
   createdAt: string
 }
 
@@ -120,6 +140,9 @@ export interface GenerateQuizRequest {
   chapterId: string
   chapterTitle: string
   chapterContent: string
+  // When regenerating, the texts of the previous quiz's questions so the model
+  // can avoid repeating them.
+  avoidQuestions?: string[]
 }
 
 export interface GradeQuizRequest {
@@ -128,6 +151,8 @@ export interface GradeQuizRequest {
 }
 
 export interface AnalyzeWeakPointsRequest {
+  chapterId: string
+  chapterContent: string
   questions: QuizQuestion[]
   answers: QuizAnswer[]
   results: { questionId: string; correct: boolean; feedback: string }[]
@@ -156,12 +181,20 @@ export interface SpeculaAPI {
     create: (data: Omit<Highlight, 'id' | 'createdAt'>) => Promise<Highlight>
     listByBook: (bookId: string) => Promise<Highlight[]>
     delete: (id: string) => Promise<void>
+    createFromWeakPoints: (data: {
+      bookId: string
+      chapterId: string
+      weakPoints: WeakPoint[]
+    }) => Promise<Highlight[]>
   }
   ai: {
     explain: (req: ExplainRequest) => Promise<string>
     explainStream: (req: ExplainRequest) => Promise<void>
     explainImageStream: (req: ImageExplainRequest) => Promise<void>
-    onExplainChunk: (callback: (chunk: string) => void) => () => void
+    onExplainChunk: (
+      callback: (chunk: string) => void,
+      onError?: (message: string) => void
+    ) => () => void
     generateQuiz: (req: GenerateQuizRequest) => Promise<Quiz>
     gradeQuiz: (req: GradeQuizRequest) => Promise<{
       score: number
@@ -174,6 +207,7 @@ export interface SpeculaAPI {
     saveAttempt: (attempt: Omit<QuizAttempt, 'id' | 'createdAt'>) => Promise<QuizAttempt>
     getAttempts: (quizId: string) => Promise<QuizAttempt[]>
     getLatestAttempt: (quizId: string) => Promise<QuizAttempt | null>
+    getHistoryByChapter: (chapterId: string) => Promise<QuizAttempt[]>
   }
   settings: {
     get: () => Promise<AppSettings>
@@ -194,6 +228,13 @@ export const TEACHING_MODE_LABELS: Record<TeachingMode, string> = {
   socratic: '苏格拉底式',
   feynman: '费曼式',
   analogy: '类比式',
+  case: '案例式',
+  contrast: '对比式',
+  story: '故事式',
+  structure: '结构图解式',
+  summary: '要点速览',
+  practice: '实践应用式',
+  history: '历史溯源式',
 }
 
 export const TEACHING_MODE_DESCRIPTIONS: Record<TeachingMode, string> = {
@@ -201,4 +242,11 @@ export const TEACHING_MODE_DESCRIPTIONS: Record<TeachingMode, string> = {
   socratic: '通过引导性问题启发思考，不直接给答案',
   feynman: '用简单语言解释，并请你用自己的话复述',
   analogy: '用生活化类比帮助理解抽象概念',
+  case: '用真实案例和实例讲解概念',
+  contrast: '对比易混淆的相近概念，厘清边界',
+  story: '用叙事或情境把你带入并理解',
+  structure: '用提纲与层级梳理知识结构',
+  summary: '极简 TL;DR，快速抓住要点复习',
+  practice: '聚焦如何应用、怎么动手实践',
+  history: '追溯概念的由来与演变脉络',
 }

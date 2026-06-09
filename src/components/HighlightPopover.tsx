@@ -34,15 +34,24 @@ export default function HighlightPopover({
   const [loading, setLoading] = useState(false)
   const [explanation, setExplanation] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [error, setError] = useState('')
 
   const handleExplain = async () => {
     setLoading(true)
     setExplanation('')
+    setError('')
     setStreaming(true)
 
-    const cleanup = window.specula.ai.onExplainChunk((chunk) => {
-      setExplanation((prev) => prev + chunk)
-    })
+    const cleanup = window.specula.ai.onExplainChunk(
+      (chunk) => {
+        setExplanation((prev) => prev + chunk)
+      },
+      (message) => {
+        setError(message || 'AI 解释失败')
+        setLoading(false)
+        setStreaming(false)
+      }
+    )
 
     try {
       await window.specula.ai.explainStream({
@@ -53,7 +62,7 @@ export default function HighlightPopover({
         chapterTitle,
       })
     } catch (err) {
-      setExplanation(err instanceof Error ? err.message : 'AI 解释失败')
+      setError(err instanceof Error ? err.message : 'AI 解释失败')
     } finally {
       cleanup()
       setLoading(false)
@@ -69,6 +78,7 @@ export default function HighlightPopover({
       context: selection.context,
       aiExplanation: explanation || null,
       teachingMode: mode,
+      source: 'user',
     })
     onSaved()
     onClose()
@@ -113,6 +123,8 @@ export default function HighlightPopover({
             正在思考...
           </div>
         )}
+
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
         {explanation && (
           <div className="prose prose-sm max-w-none dark:prose-invert">

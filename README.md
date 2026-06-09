@@ -1,106 +1,93 @@
-<div align="center">
+# Specula
 
-# 📖 Specula
+桌面电子书阅读应用（v0.1.0），在本地阅读 EPUB / PDF，并通过 AI 做划线解释、章节测验和薄弱点复习。
 
-**An AI-assisted desktop reader for PDF & EPUB — explain selections, quiz yourself, and get targeted teaching on your weak spots, powered by DeepSeek.**
-
-**AI 辅助桌面阅读器 — 支持 PDF / EPUB，划线解释、章节测验与薄弱点智能教学，由 DeepSeek 驱动。**
-
-[English](#english) · [中文](#中文)
-
-</div>
+书籍、阅读进度、划线与测验记录保存在本机。使用 AI 功能需要自行配置 API Key，并向对应服务发送请求。
 
 ---
 
-## English
+## 能做什么
 
-Specula is a local-first desktop reading app that turns any PDF or EPUB into an interactive
-learning experience. Select a passage to get an AI explanation in the teaching style you
-prefer, generate a quiz for the current chapter, and let the AI diagnose your weak points
-with tailored mini-lessons. Your books and API key never leave your machine.
+### 书库
 
-### ✨ Features
+- 导入 EPUB、PDF
+- 自动读取书名、作者、封面
+- 删除书籍
 
-- **📚 Library** — Import PDF and EPUB books; covers and metadata are extracted automatically.
-- **📖 Reader**
-  - EPUB: chapter-by-chapter rendering with inlined images and native text selection.
-  - PDF: full document viewing with chapter jumps.
-  - Reading progress is saved automatically.
-- **💡 AI highlight explanations** — Select any text and get an explanation in one of four
-  teaching styles, streamed in real time:
-  - **Direct** — clear, structured explanation
-  - **Socratic** — guiding questions instead of answers
-  - **Feynman** — plain-language explanation with a recap prompt
-  - **Analogy** — everyday analogies for abstract concepts
-- **📝 Chapter quizzes** — AI generates multiple-choice, fill-in-the-blank, and short-answer
-  questions from the chapter; short answers are graded by the AI.
-- **🎯 Weak-point analysis** — After a quiz, the AI diagnoses your weak knowledge points and
-  writes targeted mini-lessons.
-- **🔒 Private by design** — Books, reading data, and your encrypted DeepSeek API key are
-  stored locally. Nothing is uploaded except your prompts to the DeepSeek API.
+### 阅读
 
-### 🌟 Highlights
+- **EPUB**：按章节阅读，图片内联显示；记住章节内滚动位置
+- **PDF**：按页阅读，支持章节跳转（依赖书籍目录）；记住当前页码
+- 深色模式
 
-- **Four teaching styles** — Not just one-size-fits-all: choose the style that helps you learn best.
-- **Learn by testing** — Quizzes aren't just for scores; they drive the AI to find exactly where you need help.
-- **Targeted mini-lessons** — Skip what you already know and focus on your weak spots.
-- **Real-time streaming** — AI explanations stream in as they're generated, no waiting.
-- **Local-first privacy** — All your data stays on your machine. Only prompts reach the API.
-- **PDF & EPUB support** — One app for both formats, with native reading experiences for each.
+### 划线与 AI 解释（EPUB）
 
-### ⚙️ Quick Start
+- 选中文字后，可 **高亮保存** 或 **AI 解释**
+- AI 解释支持 11 种教学方式（直述、苏格拉底、费曼、类比、案例、对比、故事、结构图解、要点速览、实践应用、历史溯源），可流式输出
+- 点击正文中的图片，可用视觉模型做图片解释（需在设置中单独配置视觉 API）
+- 右侧侧边栏查看当前章节的划线与薄弱点，可按「全部 / 我的划线 / 薄弱点」筛选，可删除
 
-1. Download and install Specula.
-2. Open **Settings** and paste your [DeepSeek](https://platform.deepseek.com/) API key, then click **Test Connection**.
-3. Import a book and start reading!
+### 划线与 AI 解释（PDF）
 
-> The default model is `deepseek-chat`. Your API key is stored encrypted locally and only sent to the DeepSeek API.
+- 选中文字后可 AI 解释
+- 侧边栏可查看已保存的划线说明
+- **PDF 正文内不会显示高亮标记**（见下方「已知不足」）
 
-### 📄 License
+### 章节测验
 
-Released under the [MIT License](LICENSE).
+- 根据当前章节内容生成测验（选择题、填空题、简答题）
+- 选择题与填空题自动判分；简答题由 AI 评分
+- 提交后显示得分、用时、逐题反馈
+- 可 **生成新测验**（尽量与上一套题目不同）
+- 每章保留测验记录，可查看历史成绩与薄弱点列表
+
+### 薄弱点
+
+- 测验错题经 AI 分析后，给出薄弱知识点、原因说明和针对性 mini-lesson
+- 可将薄弱点 **标记到 EPUB 原文**：正文内显示带编号、不同颜色的高亮，右侧侧边栏用相同编号对应
+- 测验结果页和复习页均可标记；支持「去原文查看」跳转
+- 复习页可查看最近一次测验详情，并切换历史记录
+
+### 设置
+
+- 配置 DeepSeek API Key 与模型（默认 `deepseek-chat`），可测试连接
+- 配置视觉模型（用于 EPUB 图片解释），可测试连接
+- 设置默认教学方式、深色模式
 
 ---
 
-## 中文
+## 快速开始
 
-Specula 是一款**本地优先**的桌面阅读应用，把任意 PDF 或 EPUB 变成可交互的学习体验：
-划选一段文字即可获得你偏好风格的 AI 讲解，为当前章节生成测验，并让 AI 诊断你的薄弱点、
-给出针对性的 mini-lesson。你的书籍和 API Key 始终留在本机。
+1. 安装 Specula（当前主要提供 **Windows x64** 安装包，见 [Releases](https://github.com/ManateeBen/Specula/releases)）。
+2. 打开 **设置**，填入 [DeepSeek](https://platform.deepseek.com/) API Key，测试连接。
+3. 如需图片解释，在设置中填入兼容 OpenAI 接口的视觉模型（如通义千问 VL 等）。
+4. 导入书籍，开始阅读。
 
-### ✨ 功能
+从源码构建：
 
-- **📚 书库** — 导入 PDF、EPUB 电子书，自动提取封面与元数据。
-- **📖 阅读器**
-  - EPUB：逐章渲染，图片内联，原生文本选区。
-  - PDF：全文阅读，支持章节跳转。
-  - 自动保存阅读进度。
-- **💡 AI 划线解释** — 选中任意文字，以四种教学方式实时流式讲解：
-  - **直述式** — 清晰、结构化的解释
-  - **苏格拉底式** — 用引导性问题启发思考
-  - **费曼式** — 用最简单的语言解释并请你复述
-  - **类比式** — 用生活化类比理解抽象概念
-- **📝 章节测验** — AI 根据章节内容生成选择题 / 填空题 / 简答题，简答题由 AI 评分。
-- **🎯 薄弱点分析** — 测验后，AI 诊断薄弱知识点并撰写针对性 mini-lesson。
-- **🔒 隐私优先** — 书籍、阅读数据与加密后的 API Key 均存储在本地，除发送给 DeepSeek API 的提示词外不上传任何内容。
+```bash
+npm install
+npm run dev          # 开发
+npm run build:win    # 打包 Windows 安装包，输出在 release/
+```
 
-### 🌟 亮点
+---
 
-- **四种教学风格** — 不再千篇一律，选择最适合你的学习方式。
-- **以测促学** — 测验不只是打分，更驱动 AI 精准定位你的薄弱环节。
-- **针对性补课** — 跳过已掌握的内容，直击薄弱点。
-- **实时流式输出** — AI 讲解即时呈现，无需等待。
-- **本地优先隐私** — 所有数据留在本机，只有提示词发送到 API。
-- **PDF & EPUB 双格式** — 一个应用搞定两种格式，各有原生阅读体验。
+## 已知不足
 
-### ⚙️ 快速开始
+- **版本较早（0.1.0）**，功能与稳定性仍在迭代，不适合当作成熟商业产品预期。
+- **依赖外部 AI 服务**：无 API Key 无法使用解释、测验、薄弱点分析；调用产生费用；需联网。
+- **AI 输出不保证正确**：解释、出题、评分、薄弱点分析均可能出错或遗漏；简答题评分较主观。
+- **EPUB 薄弱点定位**：新标记的薄弱点会尽量锚定到原文，但复杂排版、特殊字符、旧版错误数据仍可能出现「未能在正文定位」，只在侧边栏显示。
+- **PDF 能力不完整**：无正文薄弱点高亮；无正文手工划线高亮；章节边界依赖 PDF 目录，部分书籍目录不准或缺失时跳转可能不准。
+- **长章节**：生成测验时章节正文过长会被截断，可能影响出题与薄弱点分析的覆盖面。
+- **每章一套测验题**：点击「生成新测验」会替换当前章节题目，历史作答记录仍保留。
+- **仅本机数据**：无账号、无云同步；换电脑或重装后，除非手动备份数据目录，否则记录不会跟随。
+- **平台**：主要在 Windows 上开发和测试；macOS / Linux 构建配置存在，但未作为当前发布重点。
+- **修改代码后需重新打包安装**，直接改源码不会影响已安装的 release 包。
 
-1. 下载安装 Specula。
-2. 打开「**设置**」，填入 [DeepSeek](https://platform.deepseek.com/) API Key，点击「**测试连接**」。
-3. 导入书籍，开始阅读！
+---
 
-> 默认模型为 `deepseek-chat`。API Key 加密存储在本机，仅发送给 DeepSeek API。
+## 许可证
 
-### 📄 许可证
-
-基于 [MIT License](LICENSE) 发布。
+[MIT License](LICENSE)

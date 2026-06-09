@@ -49,5 +49,20 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Split the PDF stack into its own vendor chunk so it loads only when a
+        // PDF is opened, instead of bloating the main bundle.
+        manualChunks: {
+          'pdf-vendor': [
+            'pdfjs-dist',
+            '@react-pdf-viewer/core',
+            '@react-pdf-viewer/default-layout',
+          ],
+        },
+      },
+    },
+  },
   base: './',
 })

@@ -4,7 +4,7 @@ import path from 'path'
 import { dialog } from 'electron'
 import JSZip from 'jszip'
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom'
-import { getBooksDir, getCoversDir, runSql, queryAll, queryOne } from '../db'
+import { getBooksDir, getCoversDir, runSql, runMany, queryAll, queryOne } from '../db'
 import type { Book, Chapter, BookFormat } from '../../src/types'
 
 async function loadPdfJs() {
@@ -264,18 +264,57 @@ async function parsePdfMetadata(filePath: string): Promise<{
   try {
     const outline = await doc.getOutline()
     if (outline && outline.length > 0) {
-      const flattenOutline = (items: typeof outline, result: typeof chapters) => {
-        items.forEach((item, index) => {
-          result.push({
-            title: item.title || `章节 ${result.length + 1}`,
-            orderIndex: result.length,
-            startRef: String(index),
-            endRef: String(index),
-          })
-          if (item.items?.length) flattenOutline(item.items, result)
-        })
+      // Flatten the (possibly nested) outline in reading order.
+      const flat: { title: string; dest: unknown }[] = []
+      const flattenOutline = (items: typeof outline) => {
+        for (const item of items) {
+          flat.push({ title: item.title, dest: item.dest })
+          if (item.items?.length) flattenOutline(item.items)
+        }
       }
-      flattenOutline(outline, chapters)
+      flattenOutline(outline)
+
+      // Resolve an outline item's destination to a real 1-based page number.
+      const resolvePage = async (dest: unknown): Promise<number | null> => {
+        try {
+          let explicit = dest
+          if (typeof dest === 'string') {
+            explicit = await doc.getDestination(dest)
+          }
+          if (!Array.isArray(explicit) || !explicit[0]) return null
+          const pageIndex = await doc.getPageIndex(explicit[0])
+          return pageIndex + 1
+        } catch {
+          return null
+        }
+      }
+
+      const withPages: { title: string; page: number }[] = []
+      for (const it of flat) {
+        const resolved = await resolvePage(it.dest)
+        // Fall back to the previous chapter's page (or 1) when a dest can't be resolved.
+        const page = resolved ?? (withPages.length ? withPages[withPages.length - 1].page : 1)
+        withPages.push({ title: it.title, page })
+      }
+
+      withPages.forEach((wp, i) => {
+        const start = wp.page
+        // endRef = the next chapter that begins on a later page, minus one.
+        let end = numPages
+        for (let j = i + 1; j < withPages.length; j++) {
+          if (withPages[j].page > start) {
+            end = withPages[j].page - 1
+            break
+          }
+        }
+        if (end < start) end = start
+        chapters.push({
+          title: wp.title || `章节 ${i + 1}`,
+          orderIndex: i,
+          startRef: String(start),
+          endRef: String(end),
+        })
+      })
     }
   } catch {
     // no outline
@@ -321,19 +360,23 @@ export async function importBook(): Promise<Book | null> {
     ? await parseEpubMetadata(destPath)
     : await parsePdfMetadata(destPath)
 
-  runSql(
-    `INSERT INTO books (id, title, author, format, file_path, cover_path) VALUES (?, ?, ?, ?, ?, ?)`,
-    [bookId, meta.title, meta.author, format, destPath, meta.coverPath]
-  )
-
+  const statements: { sql: string; params: unknown[] }[] = [
+    {
+      sql: `INSERT INTO books (id, title, author, format, file_path, cover_path) VALUES (?, ?, ?, ?, ?, ?)`,
+      params: [bookId, meta.title, meta.author, format, destPath, meta.coverPath],
+    },
+  ]
   for (const ch of meta.chapters) {
-    runSql(
-      `INSERT INTO chapters (id, book_id, title, order_index, start_ref, end_ref) VALUES (?, ?, ?, ?, ?, ?)`,
-      [uuidv4(), bookId, ch.title, ch.orderIndex, ch.startRef, ch.endRef]
-    )
+    statements.push({
+      sql: `INSERT INTO chapters (id, book_id, title, order_index, start_ref, end_ref) VALUES (?, ?, ?, ?, ?, ?)`,
+      params: [uuidv4(), bookId, ch.title, ch.orderIndex, ch.startRef, ch.endRef],
+    })
   }
-
-  runSql(`INSERT INTO reading_progress (book_id, chapter_id, position) VALUES (?, ?, ?)`, [bookId, null, ''])
+  statements.push({
+    sql: `INSERT INTO reading_progress (book_id, chapter_id, position) VALUES (?, ?, ?)`,
+    params: [bookId, null, ''],
+  })
+  runMany(statements)
 
   const row = queryOne<BookRow>('SELECT * FROM books WHERE id = ?', [bookId])
   return row ? rowToBook(row) : null
@@ -525,6 +568,9 @@ export function listHighlights(bookId: string) {
     context: string
     ai_explanation: string | null
     teaching_mode: string | null
+    source: string
+    weak_point_topic: string | null
+    weak_point_index: number | null
     created_at: string
   }>('SELECT * FROM highlights WHERE book_id = ? ORDER BY created_at DESC', [bookId])
 }
@@ -536,14 +582,64 @@ export function createHighlight(data: {
   context: string
   aiExplanation: string | null
   teachingMode: string | null
+  source?: string
+  weakPointTopic?: string | null
 }) {
   const id = uuidv4()
   runSql(
-    `INSERT INTO highlights (id, book_id, chapter_id, selected_text, context, ai_explanation, teaching_mode)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [id, data.bookId, data.chapterId, data.selectedText, data.context, data.aiExplanation, data.teachingMode]
+    `INSERT INTO highlights (id, book_id, chapter_id, selected_text, context, ai_explanation, teaching_mode, source, weak_point_topic)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, data.bookId, data.chapterId, data.selectedText, data.context, data.aiExplanation, data.teachingMode, data.source || 'user', data.weakPointTopic || null]
   )
   return id
+}
+
+export function createHighlightsFromWeakPoints(data: {
+  bookId: string
+  chapterId: string
+  weakPoints: import('../../src/types').WeakPoint[]
+}) {
+  const results: {
+    id: string
+    bookId: string
+    chapterId: string | null
+    selectedText: string
+    context: string
+    aiExplanation: string | null
+    teachingMode: string | null
+    source: string
+    weakPointTopic: string | null
+    weakPointIndex: number | null
+    createdAt: string
+  }[] = []
+
+  const statements: { sql: string; params: unknown[] }[] = []
+  data.weakPoints.forEach((wp, i) => {
+    const id = uuidv4()
+    const wpIndex = i + 1
+    const selectedText = wp.sourceExcerpt || wp.topic
+    const aiExplanation = `${wp.reason}\n\n${wp.miniLesson}`
+    statements.push({
+      sql: `INSERT INTO highlights (id, book_id, chapter_id, selected_text, context, ai_explanation, teaching_mode, source, weak_point_topic, weak_point_index)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      params: [id, data.bookId, data.chapterId, selectedText, wp.reason, aiExplanation, null, 'quiz', wp.topic, wpIndex],
+    })
+    results.push({
+      id,
+      bookId: data.bookId,
+      chapterId: data.chapterId,
+      selectedText,
+      context: wp.reason,
+      aiExplanation,
+      teachingMode: null,
+      source: 'quiz',
+      weakPointTopic: wp.topic,
+      weakPointIndex: wpIndex,
+      createdAt: new Date().toISOString(),
+    })
+  })
+  if (statements.length > 0) runMany(statements)
+  return results
 }
 
 export function deleteHighlight(id: string): void {
