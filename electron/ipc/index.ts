@@ -25,6 +25,8 @@ import {
   gradeQuiz,
   analyzeWeakPoints,
   testConnection,
+  listTextModels,
+  listVisionModels,
   getQuizByChapter,
   saveQuizAttempt,
   getQuizAttempts,
@@ -160,4 +162,12 @@ export function registerIpcHandlers(): void {
   handle('settings:set', (_e, partial: Partial<AppSettings>) => setSettings(partial))
   handle('settings:testConnection', () => testConnection())
   handle('settings:testVision', () => testVision())
+  handle(
+    'settings:listTextModels',
+    (_e, creds?: { apiKey: string; baseURL: string }) => listTextModels(creds)
+  )
+  handle(
+    'settings:listVisionModels',
+    (_e, creds?: { apiKey: string; baseURL: string }) => listVisionModels(creds)
+  )
 }

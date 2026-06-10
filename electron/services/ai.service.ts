@@ -1,15 +1,15 @@
 import OpenAI from 'openai'
 import { BrowserWindow } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
-import { getApiKey, getModel, getDefaultTeachingMode, getVisionConfig } from './settings.service'
+import { getTextConfig, getDefaultTeachingMode, getVisionConfig } from './settings.service'
 import { runSql, queryOne, queryAll } from '../db'
 import {
   TEACHING_PROMPTS,
-  QUIZ_SYSTEM_PROMPT,
   GRADE_SYSTEM_PROMPT,
   WEAK_POINTS_SYSTEM_PROMPT,
   buildExplainUserMessage,
   buildImageUserMessage,
+  buildQuizSystemPrompt,
   buildQuizUserMessage,
   buildWeakPointsUserMessage,
   truncateContent,
@@ -30,18 +30,24 @@ import type {
   QuizQuestion,
   Quiz,
   WeakPoint,
+  QuestionType,
+  QuizPreset,
 } from '../../src/types'
-import { TEACHING_MODE_LABELS } from '../../src/types'
+import { TEACHING_MODE_LABELS, QUIZ_PRESET_LABELS, QUIZ_PRESET_TYPES } from '../../src/types'
 
 function createClient(): OpenAI {
-  const apiKey = getApiKey()
+  const { apiKey, baseURL } = getTextConfig()
   if (!apiKey) {
-    throw new Error('请先在设置中配置 DeepSeek API Key')
+    throw new Error('请先在设置中配置文本模型 API Key')
   }
-  return new OpenAI({
-    apiKey,
-    baseURL: 'https://api.deepseek.com',
-  })
+  if (!baseURL) {
+    throw new Error('请先在设置中配置文本模型 Base URL')
+  }
+  return new OpenAI({ apiKey, baseURL })
+}
+
+function getModel(): string {
+  return getTextConfig().model
 }
 
 function createVisionClient(): { client: OpenAI; model: string } {
@@ -68,7 +74,7 @@ export async function testVision(): Promise<{ ok: boolean; message: string }> {
 
 // Token ceilings keep a single response (and its cost) bounded.
 const MAX_TOKENS_EXPLAIN = 1024
-const MAX_TOKENS_QUIZ = 2048
+const MAX_TOKENS_QUIZ = 4096
 const MAX_TOKENS_GRADE = 1024
 const MAX_TOKENS_WEAK_POINTS = 4096
 
@@ -102,6 +108,59 @@ export async function explainImageStream(req: ImageExplainRequest, win: BrowserW
   } catch (err) {
     win.webContents.send('ai:explain-error', err instanceof Error ? err.message : '图片解释失败')
     throw err
+  }
+}
+
+export async function listTextModels(credentials?: {
+  apiKey: string
+  baseURL: string
+}): Promise<{ ok: boolean; models: string[]; message?: string }> {
+  const { apiKey, baseURL } = credentials || getTextConfig()
+  if (!apiKey?.trim() || !baseURL?.trim()) {
+    return { ok: false, models: [], message: '请先填写 API Key 与 Base URL' }
+  }
+  try {
+    const client = new OpenAI({ apiKey, baseURL })
+    const page = await client.models.list()
+    const models = [...new Set(page.data.map((m) => m.id))].sort()
+    if (models.length === 0) {
+      return { ok: false, models: [], message: '接口未返回可用模型' }
+    }
+    return { ok: true, models }
+  } catch (err) {
+    return {
+      ok: false,
+      models: [],
+      message: err instanceof Error ? err.message : '获取模型列表失败',
+    }
+  }
+}
+
+export async function listVisionModels(credentials?: {
+  apiKey: string
+  baseURL: string
+}): Promise<{ ok: boolean; models: string[]; message?: string }> {
+  const { apiKey, baseURL } = credentials || getVisionConfig()
+  if (!apiKey?.trim() || !baseURL?.trim()) {
+    return { ok: false, models: [], message: '请先填写 API Key 与 Base URL' }
+  }
+  try {
+    const client = new OpenAI({ apiKey, baseURL })
+    const page = await client.models.list()
+    let models = [...new Set(page.data.map((m) => m.id))].sort()
+    // Prefer vision-capable model ids when the list is huge.
+    const visionLike = models.filter((id) => /vl|vision|4o|4v|glm-4v/i.test(id))
+    if (visionLike.length > 0) models = visionLike
+    if (models.length === 0) {
+      return { ok: false, models: [], message: '接口未返回可用模型' }
+    }
+    return { ok: true, models }
+  } catch (err) {
+    return {
+      ok: false,
+      models: [],
+      message: err instanceof Error ? err.message : '获取模型列表失败',
+    }
   }
 }
 
@@ -161,27 +220,166 @@ export async function explainTextStream(req: ExplainRequest, win: BrowserWindow)
   }
 }
 
-export async function generateQuiz(req: GenerateQuizRequest): Promise<Quiz> {
+function clampQuestionCount(n: number): number {
+  return Math.min(20, Math.max(1, Math.round(n) || 5))
+}
+
+function getAllowedTypes(preset: QuizPreset): QuestionType[] {
+  return QUIZ_PRESET_TYPES[preset] || QUIZ_PRESET_TYPES.all
+}
+
+const VALID_QUESTION_TYPES = new Set<QuestionType>(['choice', 'multi_choice', 'fill', 'short'])
+
+function normalizeQuestionType(raw: unknown): QuestionType | null {
+  if (typeof raw !== 'string') return null
+  const t = raw.trim().toLowerCase().replace(/\s+/g, '_')
+  if (t === 'choice' || t === 'single_choice' || t === '单选' || t === '单选题') return 'choice'
+  if (t === 'multi_choice' || t === 'multiple_choice' || t === '多选' || t === '多选题') return 'multi_choice'
+  if (t === 'fill' || t === '填空' || t === '填空题') return 'fill'
+  if (t === 'short' || t === '简答' || t === '简答题') return 'short'
+  if (VALID_QUESTION_TYPES.has(t as QuestionType)) return t as QuestionType
+  if (t.startsWith('choice')) return 'choice'
+  if (t.includes('multi')) return 'multi_choice'
+  return null
+}
+
+function normalizeQuizQuestion(raw: unknown, allowedTypes: QuestionType[]): QuizQuestion | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  const type = normalizeQuestionType(o.type)
+  if (!type || !allowedTypes.includes(type)) return null
+  const question = typeof o.question === 'string' ? o.question.trim() : ''
+  const correctAnswer = typeof o.correctAnswer === 'string' ? o.correctAnswer.trim() : ''
+  const explanation = typeof o.explanation === 'string' ? o.explanation.trim() : ''
+  if (!question || !correctAnswer) return null
+
+  const options = Array.isArray(o.options)
+    ? o.options.filter((x): x is string => typeof x === 'string')
+    : undefined
+
+  if ((type === 'choice' || type === 'multi_choice') && (!options || options.length < 2)) return null
+
+  const id = typeof o.id === 'string' && o.id.trim() ? o.id.trim() : undefined
+  return {
+    id: id || 'q',
+    type,
+    question,
+    options,
+    correctAnswer,
+    explanation: explanation || '见参考答案',
+  }
+}
+
+function validateQuizQuestions(
+  questions: QuizQuestion[],
+  count: number,
+  allowedTypes: QuestionType[]
+): QuizQuestion[] {
+  const allowed = new Set(allowedTypes)
+  return questions.filter(
+    (q) =>
+      allowed.has(q.type) &&
+      typeof q.question === 'string' &&
+      typeof q.correctAnswer === 'string' &&
+      (q.type === 'choice' || q.type === 'multi_choice' ? (q.options?.length ?? 0) >= 2 : true)
+  )
+}
+
+function parseQuizQuestionsFromResponse(
+  text: string,
+  allowedTypes: QuestionType[]
+): QuizQuestion[] {
+  let raw: unknown[]
+  try {
+    raw = parseJsonArrayFromResponse<unknown>(text)
+  } catch (err) {
+    throw err
+  }
+  const normalized: QuizQuestion[] = []
+  for (const item of raw) {
+    const q = normalizeQuizQuestion(item, allowedTypes)
+    if (q) normalized.push(q)
+  }
+  return normalized
+}
+
+async function callQuizLlm(
+  req: GenerateQuizRequest,
+  count: number,
+  allowedTypes: QuestionType[],
+  isRegenerate: boolean,
+  compact = false
+): Promise<QuizQuestion[]> {
   const client = createClient()
   const content = truncateContent(req.chapterContent)
-  const isRegenerate = !!(req.avoidQuestions && req.avoidQuestions.length > 0)
+  const preset = req.quizPreset || 'all'
+  const compactHint = compact
+    ? '\n\n务必精简：explanation 每项不超过 50 字，题干简洁，确保 {"questions":[...]} 完整闭合。'
+    : ''
 
   const response = await client.chat.completions.create({
     model: getModel(),
     messages: [
-      { role: 'system', content: QUIZ_SYSTEM_PROMPT },
+      { role: 'system', content: buildQuizSystemPrompt(count, allowedTypes) + compactHint },
       {
         role: 'user',
-        content: buildQuizUserMessage(req.chapterTitle, content, req.avoidQuestions),
+        content: buildQuizUserMessage(
+          req.chapterTitle,
+          content,
+          count,
+          QUIZ_PRESET_LABELS[preset],
+          allowedTypes,
+          req.avoidQuestions
+        ),
       },
     ],
-    // Higher temperature when regenerating so the new set diverges from the last.
-    temperature: isRegenerate ? 0.9 : 0.5,
-    max_tokens: MAX_TOKENS_QUIZ,
+    temperature: compact ? 0.3 : isRegenerate ? 0.9 : 0.5,
+    max_tokens: Math.min(8192, Math.max(MAX_TOKENS_QUIZ, count * 450)),
   })
 
-  const text = response.choices[0]?.message?.content || '[]'
-  const questions = parseJsonFromResponse<QuizQuestion[]>(text)
+  const text = response.choices[0]?.message?.content || '{"questions":[]}'
+  const finishReason = response.choices[0]?.finish_reason
+
+  try {
+    return parseQuizQuestionsFromResponse(text, allowedTypes)
+  } catch (firstErr) {
+    if (!compact) {
+      return callQuizLlm(req, count, allowedTypes, isRegenerate, true)
+    }
+    if (finishReason === 'length') {
+      throw new Error('测验生成输出过长被截断，请减少题量后重试')
+    }
+    throw firstErr
+  }
+}
+
+export async function generateQuiz(req: GenerateQuizRequest): Promise<Quiz> {
+  const count = clampQuestionCount(req.questionCount)
+  const preset = req.quizPreset || 'all'
+  const allowedTypes = getAllowedTypes(preset)
+  const isRegenerate = !!(req.avoidQuestions && req.avoidQuestions.length > 0)
+
+  let questions = validateQuizQuestions(
+    await callQuizLlm(req, count, allowedTypes, isRegenerate),
+    count,
+    allowedTypes
+  )
+
+  if (questions.length < count) {
+    questions = validateQuizQuestions(
+      await callQuizLlm(req, count, allowedTypes, isRegenerate),
+      count,
+      allowedTypes
+    )
+  }
+
+  if (questions.length < count) {
+    throw new Error(
+      `AI 仅生成了 ${questions.length} 道有效题目（需要 ${count} 道），请减少题量或更换题型后重试`
+    )
+  }
+
+  questions = questions.slice(0, count).map((q, i) => ({ ...q, id: `q${i + 1}` }))
 
   // One quiz per chapter: reuse the existing row (preserving its id, so prior
   // attempts stay linked) and just refresh the questions when regenerating.
@@ -214,12 +412,17 @@ export async function gradeQuiz(req: GradeQuizRequest): Promise<{
   score: number
   results: { questionId: string; correct: boolean; feedback: string }[]
 }> {
-  const choiceAndFill = req.questions.filter((q) => q.type === 'choice' || q.type === 'fill')
+  const autoGraded = req.questions.filter(
+    (q) => q.type === 'choice' || q.type === 'multi_choice' || q.type === 'fill'
+  )
   const shortQuestions = req.questions.filter((q) => q.type === 'short')
 
-  const autoResults = choiceAndFill.map((q) => {
+  const autoResults = autoGraded.map((q) => {
     const userAnswer = req.answers.find((a) => a.questionId === q.id)?.answer || ''
-    const correct = normalizeAnswer(userAnswer) === normalizeAnswer(q.correctAnswer)
+    const correct =
+      q.type === 'multi_choice'
+        ? normalizeMultiAnswer(userAnswer) === normalizeMultiAnswer(q.correctAnswer)
+        : normalizeAnswer(userAnswer) === normalizeAnswer(q.correctAnswer)
     return {
       questionId: q.id,
       correct,
@@ -401,6 +604,15 @@ export async function analyzeWeakPoints(req: AnalyzeWeakPointsRequest): Promise<
 
 function normalizeAnswer(s: string): string {
   return s.trim().toLowerCase().replace(/^[a-d]\.\s*/i, '')
+}
+
+function normalizeMultiAnswer(s: string): string {
+  return s
+    .split('|')
+    .map((part) => normalizeAnswer(part))
+    .filter(Boolean)
+    .sort()
+    .join('|')
 }
 
 export function getQuizByChapter(chapterId: string): Quiz | null {

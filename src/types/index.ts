@@ -53,7 +53,37 @@ export interface Highlight {
   createdAt: string
 }
 
-export type QuestionType = 'choice' | 'fill' | 'short'
+export type QuestionType = 'choice' | 'multi_choice' | 'fill' | 'short'
+
+export type QuizPreset =
+  | 'choice_only'
+  | 'choice_multi'
+  | 'choice_fill'
+  | 'choice_short'
+  | 'all'
+
+export const QUIZ_PRESET_LABELS: Record<QuizPreset, string> = {
+  choice_only: '仅单选题',
+  choice_multi: '单选 + 多选',
+  choice_fill: '选择题 + 填空题',
+  choice_short: '选择题 + 简答题',
+  all: '全部题型',
+}
+
+export const QUIZ_PRESET_TYPES: Record<QuizPreset, QuestionType[]> = {
+  choice_only: ['choice'],
+  choice_multi: ['choice', 'multi_choice'],
+  choice_fill: ['choice', 'fill'],
+  choice_short: ['choice', 'short'],
+  all: ['choice', 'multi_choice', 'fill', 'short'],
+}
+
+export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
+  choice: '单选题',
+  multi_choice: '多选题',
+  fill: '填空题',
+  short: '简答题',
+}
 
 export interface QuizQuestion {
   id: string
@@ -100,6 +130,7 @@ export interface QuizAttempt {
 
 export interface AppSettings {
   apiKey: string
+  baseURL: string
   model: string
   defaultTeachingMode: TeachingMode
   darkMode: boolean
@@ -140,6 +171,8 @@ export interface GenerateQuizRequest {
   chapterId: string
   chapterTitle: string
   chapterContent: string
+  questionCount: number
+  quizPreset: QuizPreset
   // When regenerating, the texts of the previous quiz's questions so the model
   // can avoid repeating them.
   avoidQuestions?: string[]
@@ -214,6 +247,16 @@ export interface SpeculaAPI {
     set: (settings: Partial<AppSettings>) => Promise<AppSettings>
     testConnection: () => Promise<{ ok: boolean; message: string }>
     testVision: () => Promise<{ ok: boolean; message: string }>
+    listTextModels: (creds?: { apiKey: string; baseURL: string }) => Promise<{
+      ok: boolean
+      models: string[]
+      message?: string
+    }>
+    listVisionModels: (creds?: { apiKey: string; baseURL: string }) => Promise<{
+      ok: boolean
+      models: string[]
+      message?: string
+    }>
   }
 }
 

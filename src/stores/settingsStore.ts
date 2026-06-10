@@ -9,6 +9,7 @@ interface SettingsState extends AppSettings {
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   apiKey: '',
+  baseURL: 'https://api.deepseek.com',
   model: 'deepseek-chat',
   defaultTeachingMode: 'direct' as TeachingMode,
   darkMode: false,

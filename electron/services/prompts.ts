@@ -89,45 +89,80 @@ export const TEACHING_PROMPTS = {
 - 使用中文回答`,
 } as const
 
-export const QUIZ_SYSTEM_PROMPT = `你是一位专业的教育测评专家。根据提供的章节内容，生成 5-8 道理解测试题。
+const QUIZ_TYPE_DESC: Record<string, string> = {
+  choice: '单选题(choice)',
+  multi_choice: '多选题(multi_choice)',
+  fill: '填空题(fill)',
+  short: '简答题(short)',
+}
 
-要求：
-- 题型混合：选择题(choice)、填空题(fill)、简答题(short)
-- 每道题必须能检验对章节核心概念的理解
-- 题目要覆盖章节中不同的知识点，避免集中在同一段落或同一概念
-- 难度分布合理：兼顾基础记忆、概念理解与应用分析
-- 考查角度多样化：包含概念辨析、应用场景、对比区分、细节确认等不同维度
-- 必须返回严格的 JSON 数组，不要包含 markdown 代码块
+export function buildQuizSystemPrompt(count: number, allowedTypes: string[]): string {
+  const typeList = allowedTypes.map((t) => QUIZ_TYPE_DESC[t] || t).join('、')
+  const examples: string[] = []
 
-JSON 格式：
-[
-  {
+  if (allowedTypes.includes('choice')) {
+    examples.push(`  {
     "id": "q1",
     "type": "choice",
     "question": "题目内容",
     "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
     "correctAnswer": "A. ...",
     "explanation": "答案解析"
-  },
-  {
+  }`)
+  }
+  if (allowedTypes.includes('multi_choice')) {
+    examples.push(`  {
     "id": "q2",
+    "type": "multi_choice",
+    "question": "以下哪些正确？（多选）",
+    "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
+    "correctAnswer": "A. ...|C. ...",
+    "explanation": "答案解析"
+  }`)
+  }
+  if (allowedTypes.includes('fill')) {
+    examples.push(`  {
+    "id": "q3",
     "type": "fill",
     "question": "题目内容，用 ___ 表示填空",
     "correctAnswer": "正确答案",
     "explanation": "答案解析"
-  },
-  {
-    "id": "q3",
+  }`)
+  }
+  if (allowedTypes.includes('short')) {
+    examples.push(`  {
+    "id": "q4",
     "type": "short",
     "question": "简答题内容",
     "correctAnswer": "参考答案要点",
     "explanation": "评分标准"
+  }`)
   }
-]`
+
+  return `你是一位专业的教育测评专家。根据提供的章节内容，生成恰好 ${count} 道理解测试题。
+
+要求：
+- 只允许以下题型：${typeList}；禁止出现未列出的 type
+- 数组长度必须恰好为 ${count}，id 从 q1 连续编号到 q${count}
+- 若允许多种题型，请合理混合，不要全部同一题型
+- 每道题必须能检验对章节核心概念的理解
+- 题目要覆盖章节中不同的知识点，避免集中在同一段落或同一概念
+- 难度分布合理：兼顾基础记忆、概念理解与应用分析
+- 考查角度多样化：包含概念辨析、应用场景、对比区分、细节确认等不同维度
+- multi_choice 的 correctAnswer 为所有正确选项全文，用 | 分隔（如 "A. foo|C. bar"），题干须注明多选
+- type 字段只能是以下英文之一（不要空格、不要中文）：choice、multi_choice、fill、short
+- explanation 每项不超过 80 字；优先保证 JSON 完整闭合
+- 只输出 JSON，不要 markdown 代码块，不要任何前言或结语
+
+返回格式（对象包裹数组）：
+{"questions": [
+${examples.join(',\n')}
+]}`
+}
 
 export const GRADE_SYSTEM_PROMPT = `你是一位公正的阅卷老师。请评判用户的测验答案。
 
-对于选择题和填空题：严格比对正确答案。
+对于单选题、多选题和填空题：严格比对正确答案（多选题须全部正确选项都选中且不能多选）。
 对于简答题：根据参考答案要点，评估用户答案是否涵盖关键概念（允许不同表述）。
 
 返回严格 JSON 格式（不要 markdown 代码块）：
@@ -229,9 +264,17 @@ const QUIZ_FOCUS_ANGLES = [
 export function buildQuizUserMessage(
   chapterTitle: string,
   content: string,
+  questionCount: number,
+  presetLabel: string,
+  allowedTypes: string[],
   avoidQuestions?: string[]
 ): string {
-  const parts = [`章节标题：${chapterTitle}`, `\n章节内容：\n${content}`]
+  const typeList = allowedTypes.map((t) => QUIZ_TYPE_DESC[t] || t).join('、')
+  const parts = [
+    `章节标题：${chapterTitle}`,
+    `\n章节内容：\n${content}`,
+    `\n请生成恰好 ${questionCount} 道题。题型预设：${presetLabel}（仅允许：${typeList}）。`,
+  ]
 
   // Pick a random focus angle so successive generations emphasize different
   // dimensions instead of converging on the same questions.
@@ -318,7 +361,7 @@ export function parseJsonArrayFromResponse<T>(text: string): T[] {
     if (Array.isArray(parsed)) return parsed as T[]
     if (parsed && typeof parsed === 'object') {
       const obj = parsed as Record<string, unknown>
-      for (const key of ['weakPoints', 'items', 'results', 'data']) {
+      for (const key of ['questions', 'weakPoints', 'items', 'results', 'data']) {
         if (Array.isArray(obj[key])) return obj[key] as T[]
       }
     }

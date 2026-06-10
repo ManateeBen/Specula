@@ -3,6 +3,7 @@ import type { AppSettings, TeachingMode } from '../../src/types'
 
 interface StoreSchema {
   apiKey: string
+  baseURL: string
   model: string
   defaultTeachingMode: TeachingMode
   darkMode: boolean
@@ -16,6 +17,7 @@ const store = new Store<StoreSchema>({
   encryptionKey: 'specula-local-key-v1',
   defaults: {
     apiKey: '',
+    baseURL: 'https://api.deepseek.com',
     model: 'deepseek-chat',
     defaultTeachingMode: 'direct',
     darkMode: false,
@@ -28,6 +30,7 @@ const store = new Store<StoreSchema>({
 export function getSettings(): AppSettings {
   return {
     apiKey: store.get('apiKey'),
+    baseURL: store.get('baseURL') || 'https://api.deepseek.com',
     model: store.get('model'),
     defaultTeachingMode: store.get('defaultTeachingMode'),
     darkMode: store.get('darkMode'),
@@ -39,6 +42,7 @@ export function getSettings(): AppSettings {
 
 export function setSettings(partial: Partial<AppSettings>): AppSettings {
   if (partial.apiKey !== undefined) store.set('apiKey', partial.apiKey)
+  if (partial.baseURL !== undefined) store.set('baseURL', partial.baseURL)
   if (partial.model !== undefined) store.set('model', partial.model)
   if (partial.defaultTeachingMode !== undefined) store.set('defaultTeachingMode', partial.defaultTeachingMode)
   if (partial.darkMode !== undefined) store.set('darkMode', partial.darkMode)
@@ -46,6 +50,14 @@ export function setSettings(partial: Partial<AppSettings>): AppSettings {
   if (partial.visionBaseURL !== undefined) store.set('visionBaseURL', partial.visionBaseURL)
   if (partial.visionModel !== undefined) store.set('visionModel', partial.visionModel)
   return getSettings()
+}
+
+export function getTextConfig(): { apiKey: string; baseURL: string; model: string } {
+  return {
+    apiKey: store.get('apiKey'),
+    baseURL: store.get('baseURL') || 'https://api.deepseek.com',
+    model: store.get('model') || 'deepseek-chat',
+  }
 }
 
 export function getVisionConfig(): { apiKey: string; baseURL: string; model: string } {

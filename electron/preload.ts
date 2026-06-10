@@ -72,6 +72,10 @@ const api: SpeculaAPI = {
     set: (settings: Partial<AppSettings>) => ipcRenderer.invoke('settings:set', settings),
     testConnection: () => ipcRenderer.invoke('settings:testConnection'),
     testVision: () => ipcRenderer.invoke('settings:testVision'),
+    listTextModels: (creds?: { apiKey: string; baseURL: string }) =>
+      ipcRenderer.invoke('settings:listTextModels', creds),
+    listVisionModels: (creds?: { apiKey: string; baseURL: string }) =>
+      ipcRenderer.invoke('settings:listVisionModels', creds),
   },
 }
 

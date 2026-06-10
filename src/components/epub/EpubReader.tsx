@@ -218,7 +218,8 @@ function markRange(
 interface Props {
   bookId: string
   chapters: Chapter[]
-  initialChapterId?: string | null
+  chapterId: string | null
+  onChapterChange: (chapterId: string) => void
   initialPosition?: string
   highlightExcerpt?: string | null
   highlights?: Highlight[]
@@ -236,7 +237,8 @@ interface Props {
 export default function EpubReader({
   bookId,
   chapters,
-  initialChapterId,
+  chapterId: currentChapterId,
+  onChapterChange,
   initialPosition,
   highlightExcerpt,
   highlights,
@@ -248,9 +250,7 @@ export default function EpubReader({
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-  const [currentChapterId, setCurrentChapterId] = useState<string | null>(
-    initialChapterId || chapters[0]?.id || null
-  )
+  const prevChapterIdRef = useRef<string | null>(null)
   const [html, setHtml] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -280,6 +280,11 @@ export default function EpubReader({
   )
 
   useEffect(() => {
+    if (currentChapterId && prevChapterIdRef.current && prevChapterIdRef.current !== currentChapterId) {
+      restorePosRef.current = 0
+    }
+    prevChapterIdRef.current = currentChapterId
+
     const chapter = chapters.find((c) => c.id === currentChapterId) || chapters[0]
     if (!chapter) {
       setLoading(false)
@@ -378,10 +383,10 @@ export default function EpubReader({
 
   const idx = chapters.findIndex((c) => c.id === currentChapterId)
   const goPrev = () => {
-    if (idx > 0) setCurrentChapterId(chapters[idx - 1].id)
+    if (idx > 0) onChapterChange(chapters[idx - 1].id)
   }
   const goNext = () => {
-    if (idx >= 0 && idx < chapters.length - 1) setCurrentChapterId(chapters[idx + 1].id)
+    if (idx >= 0 && idx < chapters.length - 1) onChapterChange(chapters[idx + 1].id)
   }
 
   const handleMouseUp = () => {
@@ -495,17 +500,9 @@ export default function EpubReader({
         <button onClick={goPrev} disabled={idx <= 0} className="btn-secondary py-1.5 text-xs">
           上一章
         </button>
-        <select
-          value={currentChapterId || ''}
-          onChange={(e) => setCurrentChapterId(e.target.value)}
-          className="input max-w-xs py-1.5 text-xs"
-        >
-          {chapters.map((ch) => (
-            <option key={ch.id} value={ch.id}>
-              {ch.title}
-            </option>
-          ))}
-        </select>
+        <span className="max-w-md truncate px-2 text-xs text-gray-500">
+          {chapters[idx]?.title || ''}
+        </span>
         <button
           onClick={goNext}
           disabled={idx >= chapters.length - 1}

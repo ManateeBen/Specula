@@ -1,7 +1,18 @@
 import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Highlighter, ClipboardList, PanelRightClose, PanelRightOpen, AlertTriangle, History } from 'lucide-react'
+import {
+  ArrowLeft,
+  Highlighter,
+  ClipboardList,
+  PanelRightClose,
+  PanelRightOpen,
+  PanelLeftClose,
+  PanelLeftOpen,
+  AlertTriangle,
+  History,
+} from 'lucide-react'
 import EpubReader from '../components/epub/EpubReader'
+import ChapterToc from '../components/ChapterToc'
 import HighlightPopover from '../components/HighlightPopover'
 import ImageExplanationPopover from '../components/ImageExplanationPopover'
 import type { Book, Chapter, Highlight, ImageSelectionInfo } from '../types'
@@ -27,7 +38,9 @@ export default function Reader() {
   const [fileData, setFileData] = useState<Uint8Array | null>(null)
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [highlights, setHighlights] = useState<Highlight[]>([])
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [tocOpen, setTocOpen] = useState(true)
+  const [notesOpen, setNotesOpen] = useState(true)
+  const [pdfJumpChapterId, setPdfJumpChapterId] = useState<string | null>(null)
   const [highlightFilter, setHighlightFilter] = useState<HighlightFilter>('all')
   const [unlocatedIds, setUnlocatedIds] = useState<string[]>([])
   const [error, setError] = useState('')
@@ -141,9 +154,24 @@ export default function Reader() {
     setHighlights(hl)
   }
 
-  const currentChapter = chapters.find((c) => c.id === currentChapterId)
+  const activeChapterId = currentChapterId ?? chapters[0]?.id ?? null
+  const currentChapter = chapters.find((c) => c.id === activeChapterId)
+
+  const handleTocSelect = useCallback(
+    (chapterId: string) => {
+      setCurrentChapterId(chapterId)
+      if (book?.format === 'pdf') {
+        setPdfJumpChapterId(chapterId)
+      }
+    },
+    [book?.format]
+  )
+
+  const handleChapterChange = useCallback((chapterId: string) => {
+    setCurrentChapterId(chapterId)
+  }, [])
   // Notes sidebar shows only the current chapter's highlights.
-  const chapterHighlights = highlights.filter((h) => h.chapterId === currentChapterId)
+  const chapterHighlights = highlights.filter((h) => h.chapterId === activeChapterId)
   const wpIndexMap = buildWeakPointIndexMap(chapterHighlights)
   const displayedHighlights = sortHighlightsForDisplay(
     chapterHighlights.filter((h) => highlightFilter === 'all' || h.source === highlightFilter),
@@ -167,9 +195,26 @@ export default function Reader() {
 
   return (
     <div className="flex h-full">
+      {tocOpen && (
+        <aside className="w-56 shrink-0 overflow-hidden border-r border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+          <ChapterToc
+            chapters={chapters}
+            currentChapterId={activeChapterId}
+            onSelect={handleTocSelect}
+          />
+        </aside>
+      )}
+
       <div className="flex flex-1 flex-col overflow-hidden">
         <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 py-2 dark:border-gray-700 dark:bg-gray-900">
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setTocOpen(!tocOpen)}
+              className="rounded p-1 hover:bg-gray-100 dark:hover:bg-gray-800"
+              title={tocOpen ? '隐藏目录' : '显示目录'}
+            >
+              {tocOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
+            </button>
             <Link to="/" className="rounded p-1 hover:bg-gray-100 dark:hover:bg-gray-800">
               <ArrowLeft className="h-5 w-5" />
             </Link>
@@ -181,17 +226,17 @@ export default function Reader() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {currentChapterId && (
+            {activeChapterId && (
               <>
                 <Link
-                  to={`/quiz/${bookId}/${currentChapterId}`}
+                  to={`/quiz/${bookId}/${activeChapterId}`}
                   className="btn-secondary py-1.5 text-xs"
                 >
                   <ClipboardList className="h-3.5 w-3.5" />
                   章节测验
                 </Link>
                 <Link
-                  to={`/quiz-history/${bookId}/${currentChapterId}`}
+                  to={`/quiz-history/${bookId}/${activeChapterId}`}
                   className="btn-secondary py-1.5 text-xs"
                 >
                   <History className="h-3.5 w-3.5" />
@@ -200,10 +245,11 @@ export default function Reader() {
               </>
             )}
             <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
+              onClick={() => setNotesOpen(!notesOpen)}
               className="rounded p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800"
+              title={notesOpen ? '隐藏笔记' : '显示笔记'}
             >
-              {sidebarOpen ? (
+              {notesOpen ? (
                 <PanelRightClose className="h-4 w-4" />
               ) : (
                 <PanelRightOpen className="h-4 w-4" />
@@ -217,7 +263,8 @@ export default function Reader() {
             <EpubReader
               bookId={book.id}
               chapters={chapters}
-              initialChapterId={currentChapterId}
+              chapterId={activeChapterId}
+              onChapterChange={handleChapterChange}
               initialPosition={initialPosition}
               highlightExcerpt={deepLinkHighlight}
               highlights={highlights}
@@ -237,6 +284,8 @@ export default function Reader() {
                 data={fileData!}
                 chapters={chapters}
                 initialPosition={initialPosition}
+                jumpToChapterId={pdfJumpChapterId}
+                onJumpComplete={() => setPdfJumpChapterId(null)}
                 onProgress={handleProgress}
                 onTextSelect={handleTextSelect}
               />
@@ -247,7 +296,7 @@ export default function Reader() {
             <HighlightPopover
               selection={selection}
               bookId={bookId}
-              chapterId={currentChapterId}
+              chapterId={activeChapterId}
               bookTitle={book.title}
               chapterTitle={currentChapter?.title}
               onClose={() => setSelection(null)}
@@ -259,7 +308,7 @@ export default function Reader() {
             <ImageExplanationPopover
               selection={imageSelection}
               bookId={bookId}
-              chapterId={currentChapterId}
+              chapterId={activeChapterId}
               bookTitle={book.title}
               chapterTitle={currentChapter?.title}
               onClose={() => setImageSelection(null)}
@@ -269,7 +318,7 @@ export default function Reader() {
         </div>
       </div>
 
-      {sidebarOpen && (
+      {notesOpen && (
         <aside className="w-72 shrink-0 overflow-y-auto border-l border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
           <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-700">
             <div className="flex items-center gap-2 text-sm font-medium">
