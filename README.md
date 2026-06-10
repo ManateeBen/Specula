@@ -10,7 +10,7 @@
 
 **Windows x64** 安装包（推荐）：
 
-👉 **[下载 Specula Setup 0.1.0.exe](https://github.com/ManateeBen/Specula/releases/latest/download/Specula%20Setup%200.1.0.exe)**
+👉 **[下载 Specula.Setup.0.1.0.exe](https://github.com/ManateeBen/Specula/releases/latest/download/Specula.Setup.0.1.0.exe)**（Windows x64 安装程序，约 94 MB）
 
 或前往 [Releases 页面](https://github.com/ManateeBen/Specula/releases) 查看版本说明与历史版本。
 
